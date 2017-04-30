@@ -1,4 +1,4 @@
-package io.github.pityka.flat
+package flatjoin
 
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.file.StandardOpenOption

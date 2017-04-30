@@ -1,12 +1,10 @@
-package io.github.pityka
-
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.file.StandardOpenOption
 import java.nio.channels.FileChannel
 import java.io.{Closeable, File}
 import scala.collection.mutable.ArrayBuffer
 
-package object flat {
+package object flatjoin {
 
   val EmptyCloseable = new Closeable { def close = () }
 

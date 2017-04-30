@@ -1,4 +1,4 @@
-package io.github.pityka.flat
+package flatjoin
 
 import org.scalatest.FunSpec
 import org.scalatest.matchers.ShouldMatchers

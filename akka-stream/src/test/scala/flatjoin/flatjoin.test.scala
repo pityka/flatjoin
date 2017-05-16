@@ -185,9 +185,10 @@ class Flat extends FunSpec with ShouldMatchers {
 
       val f =
         Await
-          .result(
-            concatSources(sources).via(outerJoin(2, 4, 6)).runWith(Sink.seq),
-            20 seconds)
+          .result(concatSources(sources)
+                    .via(outerJoinBySortingShards(2, 4, 6))
+                    .runWith(Sink.seq),
+                  20 seconds)
           .map(_.toVector)
           .toList
       f.sortBy(_.hashCode) should equal(expectedJoin.sortBy(_.hashCode))
@@ -195,15 +196,15 @@ class Flat extends FunSpec with ShouldMatchers {
     }
     it("big") {
 
-      Await.result(
-        concatSources(List(it1, it2)).via(outerJoin(M, 2, 6)).runForeach {
-          joined =>
-            val idx = joined.find(_.isDefined).get.get
-            if (idx < 500) joined(1) should equal(None)
-            else if (idx > N) joined(0) should equal(None)
-            else joined(0).get should equal(joined(1).get)
-        },
-        60 seconds)
+      Await.result(concatSources(List(it1, it2))
+                     .via(outerJoinBySortingShards(M, 2, 6))
+                     .runForeach { joined =>
+                       val idx = joined.find(_.isDefined).get.get
+                       if (idx < 500) joined(1) should equal(None)
+                       else if (idx > N) joined(0) should equal(None)
+                       else joined(0).get should equal(joined(1).get)
+                     },
+                   60 seconds)
 
     }
   }
@@ -215,7 +216,7 @@ class Flat extends FunSpec with ShouldMatchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(outerJoinWithHashMap(2, 4, 6))
+                    .via(outerJoinByShards(2, 4, 6))
                     .runWith(Sink.seq),
                   60 seconds)
           .map(_.toVector)
@@ -226,7 +227,7 @@ class Flat extends FunSpec with ShouldMatchers {
     it("big") {
 
       Await.result(concatSources(List(it1, it2))
-                     .via(outerJoinWithHashMap(M, 2, 6))
+                     .via(outerJoinByShards(M, 2, 6))
                      .runForeach { joined =>
                        val idx = joined.find(_.isDefined).get.get
                        if (idx < 500) joined(1) should equal(None)
@@ -243,7 +244,8 @@ class Flat extends FunSpec with ShouldMatchers {
       val source = Source(List("a", "a", "b", "b", "b", "a"))
 
       Await
-        .result(source.via(group(2, 2)).runWith(Sink.seq), atMost = 5 seconds)
+        .result(source.via(groupBySortingShards(2, 2)).runWith(Sink.seq),
+                atMost = 5 seconds)
         .toSet should equal(Set(List("a", "a", "a"), List("b", "b", "b")))
     }
   }

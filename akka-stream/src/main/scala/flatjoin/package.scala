@@ -190,20 +190,6 @@ package object flatjoin_akka {
     sortInBatches[T](max) via merge[T]
   }
 
-  def outerJoinSorted[T](columns: Int)(implicit ord: Ordering[(Int, T)])
-    : Flow[(Int, T), Seq[Option[T]], NotUsed] =
-    Flow[(Int, T)]
-      .via(adjacentSpan)
-      .mapConcat(group => flatjoin.crossGroup(group, columns).toList)
-
-  def sortAndOuterJoin[T: Ordering](max: Int, columns: Int)(
-      implicit f: Format[(Int, T)],
-      mat: Materializer): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
-    import mat.executionContext
-    implicit val ordering: Ordering[(Int, T)] = Ordering.by(_._2)
-    Flow[(Int, T)].via(sort[(Int, T)](max)).via(outerJoinSorted(columns))
-  }
-
   def sortAndGroup[T: Ordering](max: Int)(
       implicit f: Format[T],
       mat: Materializer): Flow[T, Seq[T], NotUsed] = {
@@ -211,16 +197,7 @@ package object flatjoin_akka {
     Flow[T].via(sort[T](max)).via(adjacentSpan)
   }
 
-  def outerJoinShards[T: Ordering](max: Int, columns: Int)(
-      implicit f: Format[(Int, T)],
-      mat: Materializer): Flow[File, Seq[Option[T]], NotUsed] = {
-    import mat.executionContext
-    Flow[File].flatMapConcat { file =>
-      readFileThenDelete[(Int, T)](file).via(sortAndOuterJoin[T](max, columns))
-    }
-  }
-
-  def sortAndGroupShards[T: Ordering](max: Int)(
+  def groupShardsBySorting[T: Ordering](max: Int)(
       implicit f: Format[T],
       mat: Materializer): Flow[File, Seq[T], NotUsed] = {
     import mat.executionContext
@@ -229,28 +206,17 @@ package object flatjoin_akka {
     }
   }
 
-  def outerJoin[T: StringKey](max: Int, columns: Int, parallelism: Int)(
-      implicit f: Format[(Int, T)],
-      mat: Materializer): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
+  def groupShardsByHashMap[T: StringKey](
+      implicit f: Format[T],
+      mat: Materializer): Flow[File, Seq[T], NotUsed] = {
     import mat.executionContext
 
-    implicit val sk = new StringKey[(Int, T)] {
-      def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
+    Flow[File].flatMapConcat { file =>
+      readFileThenDelete[T](file).via(groupWithHashMap[T])
     }
-    implicit val ordering: Ordering[T] =
-      Ordering.by(x => implicitly[StringKey[T]].key(x))
-
-    shard[(Int, T)].flatMapConcat { (shards: Seq[File]) =>
-      val (nonempty, empty) = shards.toList.partition(_.length > 0)
-      empty.foreach(_.delete)
-      Source(nonempty.toList).via(
-        balancerUnordered(outerJoinShards(max, columns), parallelism))
-
-    }.mapMaterializedValue(_ => NotUsed)
-
   }
 
-  def group[T: StringKey](max: Int, parallelism: Int)(
+  def groupBySortingShards[T: StringKey](max: Int, parallelism: Int)(
       implicit f: Format[T],
       mat: Materializer): Flow[T, Seq[T], NotUsed] = {
     import mat.executionContext
@@ -262,17 +228,34 @@ package object flatjoin_akka {
       val (nonempty, empty) = shards.toList.partition(_.length > 0)
       empty.foreach(_.delete)
       Source(nonempty.toList).via(
-        balancerUnordered(sortAndGroupShards(max), parallelism))
+        balancerUnordered(groupShardsBySorting(max), parallelism))
 
     }.mapMaterializedValue(_ => NotUsed)
 
   }
 
-  def outerJoinInMemory[T: StringKey](
-      columns: Int): Flow[(Int, T), Seq[Option[T]], NotUsed] =
-    Flow.fromGraph(new GraphStage[FlowShape[(Int, T), Seq[Option[T]]]] {
-      val in: Inlet[(Int, T)] = Inlet("outerJoinInMemory.in")
-      val out: Outlet[Seq[Option[T]]] = Outlet("outerJoinInMemory.out")
+  def groupByShardsInMemory[T: StringKey](max: Int, parallelism: Int)(
+      implicit f: Format[T],
+      mat: Materializer): Flow[T, Seq[T], NotUsed] = {
+    import mat.executionContext
+
+    implicit val ordering: Ordering[T] =
+      Ordering.by(x => implicitly[StringKey[T]].key(x))
+
+    shard[T].flatMapConcat { (shards: Seq[File]) =>
+      val (nonempty, empty) = shards.toList.partition(_.length > 0)
+      empty.foreach(_.delete)
+      Source(nonempty.toList).via(
+        balancerUnordered(groupShardsByHashMap, parallelism))
+
+    }.mapMaterializedValue(_ => NotUsed)
+
+  }
+
+  def groupWithHashMap[T: StringKey]: Flow[T, Seq[T], NotUsed] =
+    Flow.fromGraph(new GraphStage[FlowShape[T, Seq[T]]] {
+      val in: Inlet[T] = Inlet("groupInMemory.in")
+      val out: Outlet[Seq[T]] = Outlet("groupInMemory.out")
 
       import scala.collection.mutable.{ArrayBuffer, AnyRefMap}
 
@@ -282,21 +265,17 @@ package object flatjoin_akka {
         new GraphStageLogic(shape) {
 
           val mmap =
-            AnyRefMap[String, ArrayBuffer[(Int, T)]]()
+            AnyRefMap[String, ArrayBuffer[T]]()
 
           setHandler(in, new InHandler {
             override def onUpstreamFinish(): Unit = {
-              val joined = mmap.flatMap {
-                case (_, group) =>
-                  crossGroup(group, columns)
-              }
-              emitMultiple(out, joined.toList)
+              emitMultiple(out, mmap.values.toList)
               complete(out)
             }
             override def onPush(): Unit = {
               val elem = grab(in)
 
-              val key = implicitly[StringKey[T]].key(elem._2)
+              val key = implicitly[StringKey[T]].key(elem)
               mmap.get(key) match {
                 case None => mmap.update(key, ArrayBuffer(elem))
                 case Some(buffer) => buffer.append(elem)
@@ -312,27 +291,59 @@ package object flatjoin_akka {
         }
     })
 
-  def outerJoinWithHashMap[T: StringKey](max: Int,
-                                         columns: Int,
-                                         parallelism: Int)(
-      implicit f: Format[(Int, T)],
-      mat: Materializer): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
-    import mat.executionContext
+  def outerJoinGrouped[T](
+      columns: Int): Flow[Seq[(Int, T)], Seq[Option[T]], NotUsed] =
+    Flow[Seq[(Int, T)]].mapConcat { group =>
+      crossGroup(group, columns).toList
+    }
+
+  def outerJoinInMemory[T: StringKey](
+      columns: Int): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
     implicit val sk = new StringKey[(Int, T)] {
       def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
     }
-    implicit val ordering: Ordering[T] =
-      Ordering.by(x => implicitly[StringKey[T]].key(x))
 
-    shard[(Int, T)].flatMapConcat { x =>
-      val (nonempty, empty) = x.toList.partition(_.length > 0)
-      empty.foreach(_.delete)
-      Source(nonempty.toList).via(balancerUnordered(Flow[File].flatMapConcat {
-        file =>
-          readFileThenDelete[(Int, T)](file).via(outerJoinInMemory[T](columns))
-      }, parallelism))
-    }.mapMaterializedValue(_ => NotUsed)
+    Flow[(Int, T)]
+      .via(groupWithHashMap[(Int, T)])
+      .via(outerJoinGrouped(columns))
+  }
 
+  def outerJoinByShards[T: StringKey](max: Int,
+                                      columns: Int,
+                                      parallelism: Int)(
+      implicit f: Format[(Int, T)],
+      mat: Materializer): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
+    implicit val sk = new StringKey[(Int, T)] {
+      def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
+    }
+    Flow[(Int, T)]
+      .via(groupByShardsInMemory[(Int, T)](max, parallelism))
+      .via(outerJoinGrouped(columns))
+  }
+
+  def outerJoinSorted[T](columns: Int)(implicit ord: Ordering[(Int, T)])
+    : Flow[(Int, T), Seq[Option[T]], NotUsed] =
+    Flow[(Int, T)].via(adjacentSpan).via(outerJoinGrouped(columns))
+
+  def sortAndOuterJoin[T: Ordering](max: Int, columns: Int)(
+      implicit f: Format[(Int, T)],
+      mat: Materializer): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
+    import mat.executionContext
+    implicit val ordering: Ordering[(Int, T)] = Ordering.by(_._2)
+    Flow[(Int, T)].via(sort[(Int, T)](max)).via(outerJoinSorted(columns))
+  }
+
+  def outerJoinBySortingShards[T: StringKey](max: Int,
+                                             columns: Int,
+                                             parallelism: Int)(
+      implicit f: Format[(Int, T)],
+      mat: Materializer): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
+    implicit val sk = new StringKey[(Int, T)] {
+      def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
+    }
+    Flow[(Int, T)]
+      .via(groupBySortingShards[(Int, T)](max, parallelism))
+      .via(outerJoinGrouped(columns))
   }
 
   def concatSources[T](sources: Seq[Source[T, _]]): Source[(Int, T), _] =

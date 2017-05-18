@@ -6,7 +6,7 @@ import java.nio.ByteBuffer
 import java.io.Closeable
 
 import circeformat._
-// import boopickle.Default._
+import flatjoin_iterator._
 
 class CirceFlat extends FunSpec with ShouldMatchers {
 

@@ -1,5 +1,6 @@
 package flatjoin
 
+import flatjoin_iterator._
 import org.scalatest.FunSpec
 import org.scalatest.matchers.ShouldMatchers
 import java.nio.ByteBuffer
@@ -7,6 +8,7 @@ import java.io.Closeable
 
 import boopickleformat._
 import boopickle.Default._
+import flatjoin_iterator._
 
 class BoopickleFlat extends FunSpec with ShouldMatchers {
 

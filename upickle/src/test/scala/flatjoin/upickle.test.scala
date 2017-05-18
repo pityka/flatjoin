@@ -7,6 +7,7 @@ import java.io.Closeable
 
 import upickleformat._
 import upickle.default._
+import flatjoin_iterator._
 
 class upickleFlat extends FunSpec with ShouldMatchers {
 

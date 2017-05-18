@@ -10,7 +10,7 @@ lazy val root = (project in file("."))
     name := "flatjoin",
     publishArtifact := false
   )
-  .aggregate(core, boopickle, upickle, akkastream)
+  .aggregate(core, boopickle, upickle, akkastream, iterator, circe)
 
 lazy val core = (project in file("core"))
   .settings(commonSettings: _*)
@@ -49,6 +49,15 @@ lazy val boopickle = (project in file("boopickle"))
       "org.scalatest" %% "scalatest" % "2.1.5" % "test",
       "io.suzaku" %% "boopickle" % "1.2.6")
   )
+  .dependsOn(core, iterator)
+
+lazy val iterator = (project in file("iterator"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "flatjoin-iterator",
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "2.1.5" % "test")
+  )
   .dependsOn(core)
 
 lazy val circe = (project in file("circe"))
@@ -62,7 +71,7 @@ lazy val circe = (project in file("circe"))
       "io.circe" %% "circe-parser" % "0.8.0"
     )
   )
-  .dependsOn(core)
+  .dependsOn(core, iterator)
 
 lazy val upickle = (project in file("upickle"))
   .settings(commonSettings: _*)
@@ -72,4 +81,4 @@ lazy val upickle = (project in file("upickle"))
       "org.scalatest" %% "scalatest" % "2.1.5" % "test",
       "com.lihaoyi" %% "upickle" % "0.4.3")
   )
-  .dependsOn(core)
+  .dependsOn(core, iterator)

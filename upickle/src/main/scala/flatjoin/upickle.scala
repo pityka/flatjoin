@@ -2,6 +2,7 @@ package flatjoin
 
 import upickle.default._
 import java.nio.ByteBuffer
+import flatjoin_iterator._
 
 object upickleformat {
   implicit def format[T: Reader: Writer] = new Format[T] {

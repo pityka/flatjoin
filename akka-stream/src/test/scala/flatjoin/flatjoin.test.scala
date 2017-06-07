@@ -216,7 +216,7 @@ class Flat extends FunSpec with ShouldMatchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(outerJoinByShards(2, 4, 6))
+                    .via(outerJoinByShards(4, 6))
                     .runWith(Sink.seq),
                   60 seconds)
           .map(_.toVector)
@@ -226,15 +226,15 @@ class Flat extends FunSpec with ShouldMatchers {
     }
     it("big") {
 
-      Await.result(concatSources(List(it1, it2))
-                     .via(outerJoinByShards(M, 2, 6))
-                     .runForeach { joined =>
-                       val idx = joined.find(_.isDefined).get.get
-                       if (idx < 500) joined(1) should equal(None)
-                       else if (idx > N) joined(0) should equal(None)
-                       else joined(0).get should equal(joined(1).get)
-                     },
-                   60 seconds)
+      Await.result(
+        concatSources(List(it1, it2)).via(outerJoinByShards(2, 6)).runForeach {
+          joined =>
+            val idx = joined.find(_.isDefined).get.get
+            if (idx < 500) joined(1) should equal(None)
+            else if (idx > N) joined(0) should equal(None)
+            else joined(0).get should equal(joined(1).get)
+        },
+        60 seconds)
 
     }
   }

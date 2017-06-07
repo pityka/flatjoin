@@ -53,11 +53,10 @@ package object flatjoin_akka {
     Flow[T].map { t =>
       val key = sk.key(t)
       (key, fmt.toBytes(t))
-    }.batchWeighted(max, _._2.remaining, x => List(x))((x, y) => y :: x)
-      .mapAsync(1) { group =>
-        val sorted = group.sortBy(_._1)
-        Source(sorted.map(x => ByteString(x._2))).runWith(dumpBytes)
-      }
+    }.grouped(max).mapAsync(1) { group =>
+      val sorted = group.sortBy(_._1)
+      Source(sorted.map(x => ByteString(x._2))).runWith(dumpBytes)
+    }
   }
 
   def readFileThenDelete[T: Format](file: File)(
@@ -140,6 +139,7 @@ package object flatjoin_akka {
       .fromGraph(
         GraphDSL.create() { implicit b =>
           import GraphDSL.Implicits._
+          // Use Partition instead
           val broadcast = b.add(Broadcast[(ByteString, Int)](flows.size))
           val merge = b.add(Merge[Seq[File]](flows.size))
           flows.zipWithIndex.foreach {
@@ -247,7 +247,7 @@ package object flatjoin_akka {
 
   }
 
-  def groupByShardsInMemory[T: StringKey](max: Int, parallelism: Int)(
+  def groupByShardsInMemory[T: StringKey](parallelism: Int)(
       implicit f: Format[T],
       mat: Materializer): Flow[T, Seq[T], NotUsed] = {
     import mat.executionContext
@@ -318,16 +318,14 @@ package object flatjoin_akka {
       .via(outerJoinGrouped(columns))
   }
 
-  def outerJoinByShards[T: StringKey](max: Int,
-                                      columns: Int,
-                                      parallelism: Int)(
+  def outerJoinByShards[T: StringKey](columns: Int, parallelism: Int)(
       implicit f: Format[(Int, T)],
       mat: Materializer): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
     implicit val sk = new StringKey[(Int, T)] {
       def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
     }
     Flow[(Int, T)]
-      .via(groupByShardsInMemory[(Int, T)](max, parallelism))
+      .via(groupByShardsInMemory[(Int, T)](parallelism))
       .via(outerJoinGrouped(columns))
   }
 

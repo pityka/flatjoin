@@ -1,9 +1,26 @@
 lazy val commonSettings = Seq(
-    organization := "io.github.pityka",
-    scalaVersion := "2.11.11",
-    crossScalaVersions := Seq("2.12.2","2.11.11"),
-    version := "0.0.1-SNAPSHOT"
-  ) //++ reformatOnCompileSettings
+  organization := "io.github.pityka",
+  scalaVersion := "2.11.11",
+  crossScalaVersions := Seq("2.12.4", "2.11.11"),
+  version := "0.0.2-SNAPSHOT",
+  licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
+  publishTo := sonatypePublishTo.value,
+  pomExtra in Global := {
+    <url>https://pityka.github.io/flatjoin/</url>
+      <scm>
+        <connection>scm:git:github.com/pityka/flatjoin</connection>
+        <developerConnection>scm:git:git@github.com:pityka/flatjoin</developerConnection>
+        <url>github.com/pityka/flatjoin</url>
+      </scm>
+      <developers>
+        <developer>
+          <id>pityka</id>
+          <name>Istvan Bartha</name>
+          <url>https://pityka.github.io/flatjoin/</url>
+        </developer>
+      </developers>
+  }
+)
 
 lazy val root = (project in file("."))
   .settings(commonSettings: _*)
@@ -26,7 +43,7 @@ lazy val akkastream = (project in file("akka-stream"))
   .settings(
     name := "flatjoin-akka-stream",
     libraryDependencies ++= Seq(
-      "com.typesafe.akka" %% "akka-stream" % "2.4.18",
+      "com.typesafe.akka" %% "akka-stream" % "2.5.11",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test")
   )
   .dependsOn(core)
@@ -68,7 +85,6 @@ lazy val circe = (project in file("circe"))
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
       "io.circe" %% "circe-core" % "0.8.0",
-      // "io.circe" %% "circe-generic"%"0.8.0",
       "io.circe" %% "circe-parser" % "0.8.0"
     )
   )
@@ -83,3 +99,5 @@ lazy val upickle = (project in file("upickle"))
       "com.lihaoyi" %% "upickle" % "0.4.4")
   )
   .dependsOn(core, iterator)
+
+scalafmtOnCompile in ThisBuild := true

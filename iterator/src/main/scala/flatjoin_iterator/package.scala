@@ -112,9 +112,8 @@ package object flatjoin_iterator {
     val file = File.createTempFile("sort", "sort")
     file.deleteOnExit
     val fc = new PimpedFc(
-      FileChannel.open(file.toPath,
-                       StandardOpenOption.CREATE,
-                       StandardOpenOption.WRITE))
+      FileChannel
+        .open(file.toPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE))
     try { f(fc) } finally { fc.close }
     file
   }
@@ -263,9 +262,8 @@ package object flatjoin_iterator {
         if (i.hasNext) { r = Some(i.next) } else { r = None }
 
       def fillBuffer = {
-        while (r.isDefined && (buffer.isEmpty || ordering.equiv(
-                 r.get,
-                 buffer.head))) {
+        while (r.isDefined && (buffer.isEmpty || ordering.equiv(r.get,
+                                                                buffer.head))) {
           buffer.append(r.get)
           fill
         }
@@ -295,7 +293,7 @@ package object flatjoin_iterator {
       case pair =>
         val key = implicitly[StringKey[T]].key(pair._2)
         mmap.get(key) match {
-          case None => mmap.update(key, ArrayBuffer(pair))
+          case None         => mmap.update(key, ArrayBuffer(pair))
           case Some(buffer) => buffer.append(pair)
         }
     }

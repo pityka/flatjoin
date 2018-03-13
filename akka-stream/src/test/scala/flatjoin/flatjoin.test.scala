@@ -1,7 +1,7 @@
 package flatjoin_akka
 
 import org.scalatest.FunSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import java.nio.ByteBuffer
 import java.io.Closeable
 
@@ -15,7 +15,7 @@ import scala.concurrent.duration._
 import flatjoin._
 import java.io.File
 
-class Flat extends FunSpec with ShouldMatchers {
+class Flat extends FunSpec with Matchers {
 
   implicit val skString = new StringKey[String] {
     def key(t: String) = t.toString
@@ -98,22 +98,24 @@ class Flat extends FunSpec with ShouldMatchers {
   val a2 = List("c", "d", "e", "e", "f", "g", "h")
   val a3 = List("e", "f", "g", "h", "h", "i", "j", "k")
 
-  val expectedJoin = List(Vector(Some("a"), None, None, None),
-                          Vector(Some("a"), None, None, None),
-                          Vector(Some("b"), None, None, None),
-                          Vector(Some("c"), Some("c"), None, None),
-                          Vector(Some("d"), Some("d"), None, None),
-                          Vector(Some("e"), Some("e"), None, Some("e")),
-                          Vector(Some("e"), Some("e"), None, Some("e")),
-                          Vector(None, Some("f"), None, Some("f")),
-                          Vector(None, Some("g"), None, Some("g")),
-                          Vector(Some("h"), Some("h"), None, Some("h")),
-                          Vector(Some("h"), Some("h"), None, Some("h")),
-                          Vector(Some("h"), Some("h"), None, Some("h")),
-                          Vector(Some("h"), Some("h"), None, Some("h")),
-                          Vector(None, None, None, Some("i")),
-                          Vector(None, None, None, Some("j")),
-                          Vector(None, None, None, Some("k")))
+  val expectedJoin = List(
+    Vector(Some("a"), None, None, None),
+    Vector(Some("a"), None, None, None),
+    Vector(Some("b"), None, None, None),
+    Vector(Some("c"), Some("c"), None, None),
+    Vector(Some("d"), Some("d"), None, None),
+    Vector(Some("e"), Some("e"), None, Some("e")),
+    Vector(Some("e"), Some("e"), None, Some("e")),
+    Vector(None, Some("f"), None, Some("f")),
+    Vector(None, Some("g"), None, Some("g")),
+    Vector(Some("h"), Some("h"), None, Some("h")),
+    Vector(Some("h"), Some("h"), None, Some("h")),
+    Vector(Some("h"), Some("h"), None, Some("h")),
+    Vector(Some("h"), Some("h"), None, Some("h")),
+    Vector(None, None, None, Some("i")),
+    Vector(None, None, None, Some("j")),
+    Vector(None, None, None, Some("k"))
+  )
 
   val N = 1000000
   val M = 100000
@@ -174,7 +176,8 @@ class Flat extends FunSpec with ShouldMatchers {
             else if (idx > N) joined(0) should equal(None)
             else joined(0).get should equal(joined(1).get)
         },
-        60 seconds)
+        60 seconds
+      )
 
     }
   }
@@ -196,15 +199,17 @@ class Flat extends FunSpec with ShouldMatchers {
     }
     it("big") {
 
-      Await.result(concatSources(List(it1, it2))
-                     .via(outerJoinBySortingShards(M, 2, 6))
-                     .runForeach { joined =>
-                       val idx = joined.find(_.isDefined).get.get
-                       if (idx < 500) joined(1) should equal(None)
-                       else if (idx > N) joined(0) should equal(None)
-                       else joined(0).get should equal(joined(1).get)
-                     },
-                   60 seconds)
+      Await.result(
+        concatSources(List(it1, it2))
+          .via(outerJoinBySortingShards(M, 2, 6))
+          .runForeach { joined =>
+            val idx = joined.find(_.isDefined).get.get
+            if (idx < 500) joined(1) should equal(None)
+            else if (idx > N) joined(0) should equal(None)
+            else joined(0).get should equal(joined(1).get)
+          },
+        60 seconds
+      )
 
     }
   }
@@ -234,7 +239,8 @@ class Flat extends FunSpec with ShouldMatchers {
             else if (idx > N) joined(0) should equal(None)
             else joined(0).get should equal(joined(1).get)
         },
-        60 seconds)
+        60 seconds
+      )
 
     }
   }

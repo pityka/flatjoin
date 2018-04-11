@@ -100,4 +100,14 @@ lazy val upickle = (project in file("upickle"))
   )
   .dependsOn(core, iterator)
 
+lazy val jsoniter = (project in file("jsoniter"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "flatjoin-jsoniter",
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.0.0" % "test",
+      "com.github.plokhotnyuk.jsoniter-scala" %% "macros" % "0.23.0")
+  )
+  .dependsOn(core, iterator)
+
 scalafmtOnCompile in ThisBuild := true

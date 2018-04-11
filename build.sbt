@@ -2,7 +2,7 @@ lazy val commonSettings = Seq(
   organization := "io.github.pityka",
   scalaVersion := "2.11.11",
   crossScalaVersions := Seq("2.12.4", "2.11.11"),
-  version := "0.0.3-SNAPSHOT",
+  version := "0.0.4-SNAPSHOT",
   licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
   publishTo := sonatypePublishTo.value,
   pomExtra in Global := {
@@ -28,7 +28,7 @@ lazy val root = (project in file("."))
     name := "flatjoin",
     publishArtifact := false
   )
-  .aggregate(core, boopickle, upickle, akkastream, iterator, circe)
+  .aggregate(core, boopickle, upickle, akkastream, iterator, circe, jsoniter)
 
 lazy val core = (project in file("core"))
   .settings(commonSettings: _*)

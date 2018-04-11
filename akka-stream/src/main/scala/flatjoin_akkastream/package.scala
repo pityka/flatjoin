@@ -11,6 +11,8 @@ import java.nio._
 
 package object flatjoin_akka {
 
+  val maximumMessageLength = 1024 * 1024 * 10
+
   def balancerUnordered[In, Out](worker: Flow[In, Out, Any],
                                  workerCount: Int): Flow[In, Out, NotUsed] = {
     import GraphDSL.Implicits._
@@ -40,8 +42,8 @@ package object flatjoin_akka {
     tmp.deleteOnExit
 
     Flow[ByteString]
-      .via(
-        Framing.simpleFramingProtocolEncoder(maximumMessageLength = 512 * 1024))
+      .via(Framing.simpleFramingProtocolEncoder(
+        maximumMessageLength = maximumMessageLength))
       .batchWeighted(512 * 1024, _.size, identity)(_ ++ _)
       .toMat(FileIO.toPath(tmp.toPath))(Keep.right)
       .mapMaterializedValue(x => x.filter(_.wasSuccessful).map(_ => tmp))
@@ -69,7 +71,8 @@ package object flatjoin_akka {
     FileIO
       .fromPath(file.toPath)
       .via(
-        Framing.simpleFramingProtocolDecoder(maximumMessageLength = 512 * 1024)
+        Framing.simpleFramingProtocolDecoder(
+          maximumMessageLength = maximumMessageLength)
       )
       .map { byteString =>
         implicitly[Format[T]].fromBytes(byteString.asByteBuffer)
@@ -127,14 +130,14 @@ package object flatjoin_akka {
         scala.util.hashing.MurmurHash3
           .stringHash(implicitly[StringKey[T]].key(t)) % 128)
 
-    val flows: List[Flow[(ByteString, Int), Seq[File], _]] = files.map {
+    val flows: List[(Int, Flow[(ByteString, Int), Seq[File], _])] = files.map {
       case (idx, file) =>
-        sinkToFlow(
+        idx -> sinkToFlow(
           Flow[(ByteString, Int)]
-            .filter(_._2 == idx) //todo
             .map(_._1)
-            .via(Framing.simpleFramingProtocolEncoder(
-              maximumMessageLength = 512 * 1024))
+            .via(Framing.simpleFramingProtocolEncoder(maximumMessageLength =
+              maximumMessageLength))
+            .batchWeighted(512 * 1024, _.size, identity)(_ ++ _)
             .toMat(FileIO.toPath(file.toPath))(Keep.right)
             .mapMaterializedValue(_.map(_ => file :: Nil))).mapAsync(1)(x => x)
 
@@ -144,11 +147,10 @@ package object flatjoin_akka {
       .fromGraph(
         GraphDSL.create() { implicit b =>
           import GraphDSL.Implicits._
-          // Use Partition instead
-          val broadcast = b.add(Broadcast[(ByteString, Int)](flows.size))
+          val broadcast = b.add(Partition[(ByteString, Int)](flows.size, _._2))
           val merge = b.add(Merge[Seq[File]](flows.size))
-          flows.zipWithIndex.foreach {
-            case (f, i) =>
+          flows.foreach {
+            case (i, f) =>
               val flowShape = b.add(f)
               broadcast.out(i) ~> flowShape.in
               flowShape.out ~> merge.in(i)

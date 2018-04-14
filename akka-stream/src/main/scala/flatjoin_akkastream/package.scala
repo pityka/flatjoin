@@ -23,7 +23,8 @@ package object flatjoin_akka {
         b.add(Balance[In](workerCount, waitForAllDownstreams = true))
       val merge = b.add(Merge[Out](workerCount))
       for (_ <- 1 to workerCount) {
-        balancer ~> worker.async ~> merge
+        balancer ~> (worker via Flow[Out].grouped(1000)).async ~> Flow[Seq[Out]]
+          .mapConcat(_.toList) ~> merge
       }
 
       FlowShape.of(balancer.in, merge.out)

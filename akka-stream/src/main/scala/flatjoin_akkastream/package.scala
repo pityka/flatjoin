@@ -12,6 +12,7 @@ import java.nio._
 package object flatjoin_akka {
 
   val maximumMessageLength = 1024 * 1024 * 10
+  val writeBufferSize = 1024 * 1024 * 10
 
   def balancerUnordered[In, Out](worker: Flow[In, Out, Any],
                                  workerCount: Int): Flow[In, Out, NotUsed] = {
@@ -47,7 +48,7 @@ package object flatjoin_akka {
       .mapConcat { case (key, bytes) => List(ByteString(key), bytes) }
       .via(Framing.simpleFramingProtocolEncoder(
         maximumMessageLength = maximumMessageLength))
-      .batchWeighted(512 * 1024, _.size, identity)(_ ++ _)
+      .batchWeighted(writeBufferSize, _.size, identity)(_ ++ _)
       .toMat(FileIO.toPath(tmp.toPath))(Keep.right)
       .mapMaterializedValue(x => x.filter(_.wasSuccessful).map(_ => tmp))
   }
@@ -168,7 +169,7 @@ package object flatjoin_akka {
               .mapConcat { case (key, data, _) => List(ByteString(key), data) }
               .via(Framing.simpleFramingProtocolEncoder(maximumMessageLength =
                 maximumMessageLength))
-              .batchWeighted(512 * 1024, _.size, identity)(_ ++ _)
+              .batchWeighted(writeBufferSize, _.size, identity)(_ ++ _)
               .toMat(FileIO.toPath(file.toPath))(Keep.right)
               .mapMaterializedValue(_.map(_ => file :: Nil))).mapAsync(1)(x =>
             x)

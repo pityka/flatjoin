@@ -5,6 +5,7 @@ import akka.stream._
 import akka.stream.scaladsl._
 import akka.stream.stage._
 import scala.concurrent._
+import scala.concurrent.duration._
 import flatjoin._
 import java.io.File
 import java.nio._
@@ -49,7 +50,8 @@ package object flatjoin_akka {
       .mapConcat { case (key, bytes) => List(ByteString(key), bytes) }
       .via(Framing.simpleFramingProtocolEncoder(
         maximumMessageLength = maximumMessageLength))
-      .batchWeighted(writeBufferSize, _.size, identity)(_ ++ _)
+      .groupedWeightedWithin(writeBufferSize, 2 seconds)(_.size)
+      .map(_.reduce(_ ++ _))
       .toMat(FileIO.toPath(tmp.toPath))(Keep.right)
       .mapMaterializedValue(x => x.filter(_.wasSuccessful).map(_ => tmp))
   }
@@ -170,7 +172,8 @@ package object flatjoin_akka {
               .mapConcat { case (key, data, _) => List(ByteString(key), data) }
               .via(Framing.simpleFramingProtocolEncoder(maximumMessageLength =
                 maximumMessageLength))
-              .batchWeighted(writeBufferSize, _.size, identity)(_ ++ _)
+              .groupedWeightedWithin(writeBufferSize, 2 seconds)(_.size)
+              .map(_.reduce(_ ++ _))
               .toMat(FileIO.toPath(file.toPath))(Keep.right)
               .mapMaterializedValue(_.map(_ => file :: Nil))).mapAsync(1)(x =>
             x)

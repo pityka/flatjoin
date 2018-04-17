@@ -150,7 +150,7 @@ package object flatjoin_akka {
       FlowShape.of(sink.in, builder.materializedValue)
     })
 
-  def shard[T: Format: StringKey](
+  def shard[T: Format: StringKey](parallelism: Int)(
       implicit ec: ExecutionContext): Flow[T, Seq[File], NotUsed] = {
 
     val files = 0 until 128 map { i =>
@@ -199,13 +199,12 @@ package object flatjoin_akka {
       )
       .reduce(_ ++ _)
 
-    Flow[T]
-      .map {
-        case elem =>
-          (implicitly[StringKey[T]].key(elem),
-           ByteString(implicitly[Format[T]].toBytes(elem)),
-           hash(elem))
-      }
+    parallelize[T, (String, ByteString, Int)](parallelism, 3000) {
+      case elem =>
+        (implicitly[StringKey[T]].key(elem),
+         ByteString(implicitly[Format[T]].toBytes(elem)),
+         hash(elem))
+    }(ec)
       .viaMat(shardFlow)(Keep.right)
   }
 
@@ -289,7 +288,7 @@ package object flatjoin_akka {
       mat: Materializer): Flow[T, Seq[T], NotUsed] = {
     import mat.executionContext
 
-    shard[T]
+    shard[T](parallelism)
       .flatMapConcat { (shards: Seq[File]) =>
         val (nonempty, empty) = shards.toList.partition(_.length > 0)
         empty.foreach(_.delete)
@@ -306,7 +305,7 @@ package object flatjoin_akka {
       mat: Materializer): Flow[T, Seq[T], NotUsed] = {
     import mat.executionContext
 
-    shard[T]
+    shard[T](parallelism)
       .flatMapConcat { (shards: Seq[File]) =>
         val (nonempty, empty) = shards.toList.partition(_.length > 0)
         empty.foreach(_.delete)
@@ -426,5 +425,20 @@ package object flatjoin_akka {
           s.map(t => (i, t))
       }
       .reduce(_ ++ _)
+
+  def parallelize[T, K](parallelism: Int, bufferSize: Int = 1000)(f: T => K)(
+      implicit
+      ec: ExecutionContext): Flow[T, K, _] =
+    if (parallelism == 1)
+      Flow[T].map(f)
+    else
+      Flow[T]
+        .grouped(bufferSize)
+        .mapAsync(parallelism) { lines =>
+          Future {
+            lines.map(f)
+          }(ec)
+        }
+        .mapConcat(identity)
 
 }

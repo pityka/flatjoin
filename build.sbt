@@ -1,8 +1,8 @@
 lazy val commonSettings = Seq(
   organization := "io.github.pityka",
-  scalaVersion := "2.11.11",
+  scalaVersion := "2.12.4",
   crossScalaVersions := Seq("2.12.4", "2.11.11"),
-  version := "0.0.8-SNAPSHOT",
+  version := "0.0.9-SNAPSHOT",
   licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
   publishTo := sonatypePublishTo.value,
   pomExtra in Global := {

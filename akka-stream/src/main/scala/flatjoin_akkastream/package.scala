@@ -283,34 +283,37 @@ package object flatjoin_akka {
     }
   }
 
-  def groupBySortingShards[T: StringKey](max: Int, parallelism: Int)(
+  def groupBySortingShards[T: StringKey](max: Int,
+                                         parallelismShard: Int,
+                                         parallelismJoin: Int)(
       implicit f: Format[T],
       mat: Materializer): Flow[T, Seq[T], NotUsed] = {
     import mat.executionContext
 
-    shard[T](parallelism)
+    shard[T](parallelismShard)
       .flatMapConcat { (shards: Seq[File]) =>
         val (nonempty, empty) = shards.toList.partition(_.length > 0)
         empty.foreach(_.delete)
         Source(nonempty.toList).via(
-          balancerUnordered(groupShardsBySorting(max), parallelism))
+          balancerUnordered(groupShardsBySorting(max), parallelismJoin))
 
       }
       .mapMaterializedValue(_ => NotUsed)
 
   }
 
-  def groupByShardsInMemory[T: StringKey](parallelism: Int)(
+  def groupByShardsInMemory[T: StringKey](parallelismShard: Int,
+                                          parallelismJoin: Int)(
       implicit f: Format[T],
       mat: Materializer): Flow[T, Seq[T], NotUsed] = {
     import mat.executionContext
 
-    shard[T](parallelism)
+    shard[T](parallelismShard)
       .flatMapConcat { (shards: Seq[File]) =>
         val (nonempty, empty) = shards.toList.partition(_.length > 0)
         empty.foreach(_.delete)
         Source(nonempty.toList).via(
-          balancerUnordered(groupShardsByHashMap, parallelism))
+          balancerUnordered(groupShardsByHashMap, parallelismJoin))
 
       }
       .mapMaterializedValue(_ => NotUsed)
@@ -376,14 +379,16 @@ package object flatjoin_akka {
       .via(outerJoinGrouped(columns))
   }
 
-  def outerJoinByShards[T: StringKey](columns: Int, parallelism: Int)(
+  def outerJoinByShards[T: StringKey](columns: Int,
+                                      parallelismShard: Int,
+                                      parallelismJoin: Int)(
       implicit f: Format[(Int, T)],
       mat: Materializer): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
     implicit val sk = new StringKey[(Int, T)] {
       def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
     }
     Flow[(Int, T)]
-      .via(groupByShardsInMemory[(Int, T)](parallelism))
+      .via(groupByShardsInMemory[(Int, T)](parallelismShard, parallelismJoin))
       .via(outerJoinGrouped(columns))
   }
 
@@ -407,14 +412,16 @@ package object flatjoin_akka {
 
   def outerJoinBySortingShards[T: StringKey](max: Int,
                                              columns: Int,
-                                             parallelism: Int)(
+                                             parallelismShards: Int,
+                                             parallelismJoin: Int)(
       implicit f: Format[(Int, T)],
       mat: Materializer): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
     implicit val sk = new StringKey[(Int, T)] {
       def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
     }
     Flow[(Int, T)]
-      .via(groupBySortingShards[(Int, T)](max, parallelism))
+      .via(
+        groupBySortingShards[(Int, T)](max, parallelismShards, parallelismJoin))
       .via(outerJoinGrouped(columns))
   }
 

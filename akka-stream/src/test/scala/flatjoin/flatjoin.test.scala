@@ -189,7 +189,7 @@ class Flat extends FunSpec with Matchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(outerJoinBySortingShards(2, 4, 6))
+                    .via(outerJoinBySortingShards(2, 4, 6, 6))
                     .runWith(Sink.seq),
                   20 seconds)
           .map(_.toVector)
@@ -201,7 +201,7 @@ class Flat extends FunSpec with Matchers {
 
       Await.result(
         concatSources(List(it1, it2))
-          .via(outerJoinBySortingShards(M, 2, 6))
+          .via(outerJoinBySortingShards(M, 2, 6, 6))
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
             if (idx < 500) joined(1) should equal(None)
@@ -221,7 +221,7 @@ class Flat extends FunSpec with Matchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(outerJoinByShards(4, 6))
+                    .via(outerJoinByShards(4, 6, 6))
                     .runWith(Sink.seq),
                   60 seconds)
           .map(_.toVector)
@@ -232,13 +232,14 @@ class Flat extends FunSpec with Matchers {
     it("big") {
 
       Await.result(
-        concatSources(List(it1, it2)).via(outerJoinByShards(2, 6)).runForeach {
-          joined =>
+        concatSources(List(it1, it2))
+          .via(outerJoinByShards(2, 6, 2))
+          .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
             if (idx < 500) joined(1) should equal(None)
             else if (idx > N) joined(0) should equal(None)
             else joined(0).get should equal(joined(1).get)
-        },
+          },
         60 seconds
       )
 
@@ -250,7 +251,7 @@ class Flat extends FunSpec with Matchers {
       val source = Source(List("a", "a", "b", "b", "b", "a"))
 
       Await
-        .result(source.via(groupBySortingShards(2, 2)).runWith(Sink.seq),
+        .result(source.via(groupBySortingShards(2, 2, 2)).runWith(Sink.seq),
                 atMost = 5 seconds)
         .toSet should equal(Set(List("a", "a", "a"), List("b", "b", "b")))
     }

@@ -126,7 +126,7 @@ class Flat extends FunSpec with Matchers {
   describe("sort") {
     it("small") {
       val a1 = List("a", "a", "b", "c", "d", "e", "h", "h").reverse
-      val sortFlow = sort[String](2)
+      val sortFlow = sort[String]
       val f =
         Await.result(Source(a1).via(sortFlow).runWith(Sink.seq), 20 seconds)
       f should equal(List("a", "a", "b", "c", "d", "e", "h", "h"))
@@ -158,7 +158,7 @@ class Flat extends FunSpec with Matchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(sortAndOuterJoin(2, 4))
+                    .via(sortAndOuterJoin(4))
                     .runWith(Sink.seq),
                   20 seconds)
           .map(_.toVector)
@@ -169,7 +169,7 @@ class Flat extends FunSpec with Matchers {
     it("big") {
 
       Await.result(
-        concatSources(List(it1, it2)).via(sortAndOuterJoin(M, 2)).runForeach {
+        concatSources(List(it1, it2)).via(sortAndOuterJoin(2)).runForeach {
           joined =>
             val idx = joined.find(_.isDefined).get.get
             if (idx < 500) joined(1) should equal(None)
@@ -189,7 +189,7 @@ class Flat extends FunSpec with Matchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(outerJoinBySortingShards(2, 4, 6, 6))
+                    .via(outerJoinBySortingShards(4, 6, 6))
                     .runWith(Sink.seq),
                   20 seconds)
           .map(_.toVector)
@@ -201,7 +201,7 @@ class Flat extends FunSpec with Matchers {
 
       Await.result(
         concatSources(List(it1, it2))
-          .via(outerJoinBySortingShards(M, 2, 6, 6))
+          .via(outerJoinBySortingShards(2, 6, 6))
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
             if (idx < 500) joined(1) should equal(None)
@@ -251,7 +251,7 @@ class Flat extends FunSpec with Matchers {
       val source = Source(List("a", "a", "b", "b", "b", "a"))
 
       Await
-        .result(source.via(groupBySortingShards(2, 2, 2)).runWith(Sink.seq),
+        .result(source.via(groupBySortingShards(2, 2)).runWith(Sink.seq),
                 atMost = 5 seconds)
         .toSet should equal(Set(List("a", "a", "a"), List("b", "b", "b")))
     }

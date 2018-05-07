@@ -10,8 +10,11 @@ import scala.concurrent.duration._
 import flatjoin._
 import java.io.File
 import java.nio._
+import com.typesafe.scalalogging.Logger
 
 package object flatjoin_akka {
+
+  private[this] val logger = Logger("flatjoin")
 
   val maximumMessageLength = 1024 * 1024 * 1800
   val writeBufferSize = 1024 * 1024 * 10
@@ -105,9 +108,10 @@ package object flatjoin_akka {
       .watchTermination()((old, future) => {
         future.onComplete {
           case Success(_) =>
+            logger.debug("Deleting temporary file $file.")
             file.delete
           case Failure(e) =>
-            println("failed " + file + " " + e)
+            logger.error(s"Failed reading back temporary file: $file", e)
         }
         old
       })
@@ -304,9 +308,14 @@ package object flatjoin_akka {
     shard[T](parallelismShard)
       .flatMapConcat { (shards: Seq[File]) =>
         val (nonempty, empty) = shards.toList.partition(_.length > 0)
-        empty.foreach(_.delete)
+        empty.foreach { file =>
+          logger.debug("Deleting empty temporary file $file.")
+          file.delete
+        }
         Source(nonempty.toList).via(
-          balancerUnordered(groupShardsBySorting, parallelismJoin, 256))
+          balancerUnordered(groupShardsBySorting,
+                            parallelismJoin,
+                            groupSize = 256))
 
       }
       .mapMaterializedValue(_ => NotUsed)
@@ -324,7 +333,10 @@ package object flatjoin_akka {
         val (nonempty, empty) = shards.toList.partition(_.length > 0)
         empty.foreach(_.delete)
         Source(nonempty.toList)
-          .via(balancerUnordered(groupShardsByHashMap, parallelismJoin, 1))
+          .via(
+            balancerUnordered(groupShardsByHashMap,
+                              parallelismJoin,
+                              groupSize = 1))
           .mapConcat(_.toList)
 
       }

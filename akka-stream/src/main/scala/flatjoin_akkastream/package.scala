@@ -282,12 +282,15 @@ package object flatjoin_akka {
             FlowShape(broadcast.in, zip.out)
         })
 
-      def dumpToBucket: Flow[(T, String), (File, String), _] = {
-        val head = Flow[(T, String)].map(_._2).take(1)
+      def dumpToBucket
+        : Flow[(String, List[(String, ByteString)]), (File, String), _] = {
+        val head = Flow[(String, List[(String, ByteString)])]
+          .map(elem => elem._1)
+          .take(1)
         val file =
-          Flow[(T, String)]
-            .map(_._1)
-            .via(sinkToFlow(dump).mapAsync(1)(identity))
+          Flow[(String, List[(String, ByteString)])]
+            .mapConcat(_._2)
+            .via(sinkToFlow(dumpBytes).mapAsync(1)(identity))
 
         bubble(file, head)
 
@@ -296,10 +299,23 @@ package object flatjoin_akka {
       Flow[T]
         .map { t =>
           val key = implicitly[StringKey[T]].key(t)
+          val data = ByteString(implicitly[Format[T]].toBytes(t))
           val buck = toBucket(key)
-          (t, buck)
+          (data, buck, key)
         }
-        .groupBy(Int.MaxValue, _._2)
+        .groupedWeightedWithin(writeBufferSize, 2 seconds)(_._1.length)
+        .mapConcat { group =>
+          group
+            .groupBy(_._2)
+            .iterator
+            .map {
+              case (bucket, group) =>
+                (bucket, group.map(triple => triple._3 -> triple._1).toList)
+            }
+            .toList
+
+        }
+        .groupBy(Int.MaxValue, _._1)
         .via(dumpToBucket)
         .mergeSubstreams
         .grouped(Int.MaxValue)

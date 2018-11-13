@@ -123,6 +123,11 @@ package object flatjoin_akka {
         }
     })
 
+  def sinkToFlow[T, U](sink: Sink[T, U]): Flow[T, U, U] =
+    Flow.fromGraph(GraphDSL.create(sink) { implicit builder => sink =>
+      FlowShape.of(sink.in, builder.materializedValue)
+    })
+
   private[this] val logger = Logger("flatjoin")
 
   case class Instance(
@@ -145,17 +150,33 @@ package object flatjoin_akka {
 
     def dumpBytes(implicit ec: ExecutionContext)
       : Sink[(String, ByteString), Future[File]] = {
-      val tmp = File.createTempFile("sort", "sort")
-      tmp.deleteOnExit
+
+      val fileSink = (Sink
+        .lazyInitAsync { () =>
+          val tmp = File.createTempFile("sort", "sort")
+          tmp.deleteOnExit
+
+          Future.successful(
+            FileIO
+              .toPath(tmp.toPath)
+              .mapMaterializedValue(_.filter(_.wasSuccessful).map(_ => tmp)))
+
+        })
+        .mapMaterializedValue(futureOptionFutureFile =>
+          futureOptionFutureFile.flatMap {
+            case Some(f) => f
+            case None    => Future.failed(new RuntimeException("failed"))
+        })
 
       Flow[(String, ByteString)]
-        .mapConcat { case (key, bytes) => ByteString(key) :: bytes :: Nil }
+        .mapConcat {
+          case (key, bytes) => ByteString(key) :: bytes :: Nil
+        }
         .via(Framing.simpleFramingProtocolEncoder(
           maximumMessageLength = maximumMessageLength))
         .groupedWeightedWithin(writeBufferSize, 2 seconds)(_.size)
         .map(concatByteStrings)
-        .toMat(FileIO.toPath(tmp.toPath))(Keep.right)
-        .mapMaterializedValue(x => x.filter(_.wasSuccessful).map(_ => tmp))
+        .toMat(fileSink)(Keep.right)
     }
 
     def sortInBatches[T: StringKey](implicit am: Materializer,
@@ -243,23 +264,51 @@ package object flatjoin_akka {
       Flow[File].grouped(Int.MaxValue).flatMapConcat(s => merge(s)(makeSource))
     }
 
-    def sinkToFlow[T, U](sink: Sink[T, U]): Flow[T, U, U] =
-      Flow.fromGraph(GraphDSL.create(sink) { implicit builder => sink =>
-        FlowShape.of(sink.in, builder.materializedValue)
-      })
+    def bucket[T: Format: StringKey](toBucket: String => String)(
+        implicit ec: ExecutionContext): Flow[T, File, NotUsed] = {
 
+      def bubble[In, Out1, Out2](flow1: Flow[In, Out1, _],
+                                 flow2: Flow[In, Out2, _]) =
+        Flow.fromGraph(GraphDSL.create(flow1, flow2)((_, _)) {
+          implicit b => (flow1, flow2) =>
+            import GraphDSL.Implicits._
 
-def bucket[T: Format: StringKey](parallelism: Int, toBucket: String => String)(
-        implicit ec: ExecutionContext): Flow[T, Seq[File], NotUsed] = {
+            val broadcast = b.add(Broadcast[In](2))
+            val zip = b.add(Zip[Out1, Out2]())
 
-          val buckets = 
-         val sink = Flow[T].to(Sink.foreach{ t =>
-         val key =implicitly[StringKey[T]].key(t) 
-            val buck = toBucket(key)
+            broadcast.out(0) ~> flow1 ~> zip.in0
+            broadcast.out(1) ~> flow2 ~> zip.in1
 
-          })
+            FlowShape(broadcast.in, zip.out)
+        })
 
+      def dumpToBucket: Flow[(T, String), (File, String), _] = {
+        val head = Flow[(T, String)].map(_._2).take(1)
+        val file =
+          Flow[(T, String)]
+            .map(_._1)
+            .via(sinkToFlow(dump).mapAsync(1)(identity))
+
+        bubble(file, head)
+
+      }
+
+      Flow[T]
+        .map { t =>
+          val key = implicitly[StringKey[T]].key(t)
+          val buck = toBucket(key)
+          (t, buck)
         }
+        .groupBy(Int.MaxValue, _._2)
+        .via(dumpToBucket)
+        .mergeSubstreams
+        .grouped(Int.MaxValue)
+        .mapConcat(buckets => {
+          logger.debug("Created ${buckets.size} buckets.")
+          buckets.sortBy(_._2).map(_._1)
+        })
+
+    }
     def shard[T: Format: StringKey](parallelism: Int)(
         implicit ec: ExecutionContext): Flow[T, Seq[File], NotUsed] = {
 
@@ -325,6 +374,27 @@ def bucket[T: Format: StringKey](parallelism: Int, toBucket: String => String)(
       import am.executionContext
       sortInBatches[T] via merge[T](
         readFileThenDelete(_, bufferSize = mergeReadBufferSize))
+    }
+
+    def bucketSort[T: StringKey: Format](toBucket: String => String)(
+        implicit am: Materializer): Flow[T, T, NotUsed] = {
+      import am.executionContext
+      bucket(toBucket).flatMapConcat { bucketFile =>
+        if (bucketFile.length > writeBufferSize)
+          readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize) via sortInBatches2 via merge(
+            readFileThenDelete(_, bufferSize = mergeReadBufferSize))
+        else
+          readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize)
+            .grouped(Int.MaxValue)
+            .mapConcat { group =>
+              group
+                .sortBy(_._1)
+                .map(data =>
+                  implicitly[Format[T]].fromBytes(data._2.asByteBuffer))
+            }
+
+      }
+
     }
 
     def sortAndGroup[T: StringKey](

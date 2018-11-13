@@ -146,10 +146,10 @@ package object flatjoin_akka {
           implicitly[StringKey[T]].key(elem) -> ByteString(
             implicitly[Format[T]].toBytes(elem))
         }
-        .toMat(dumpBytes)(Keep.right)
+        .toMat(dumpBytes.mapMaterializedValue(_.map(_._1)))(Keep.right)
 
     def dumpBytes(implicit ec: ExecutionContext)
-      : Sink[(String, ByteString), Future[File]] = {
+      : Sink[(String, ByteString), Future[(File, Long)]] = {
 
       val fileSink = (Sink
         .lazyInitAsync { () =>
@@ -159,7 +159,8 @@ package object flatjoin_akka {
           Future.successful(
             FileIO
               .toPath(tmp.toPath)
-              .mapMaterializedValue(_.filter(_.wasSuccessful).map(_ => tmp)))
+              .mapMaterializedValue(_.filter(_.wasSuccessful).map(ioResult =>
+                (tmp, ioResult.count))))
 
         })
         .mapMaterializedValue(futureOptionFutureFile =>
@@ -191,7 +192,8 @@ package object flatjoin_akka {
         .groupedWeightedWithin(writeBufferSize, 2 seconds)(_._2.remaining)
         .mapAsync(1) { group =>
           val sorted = group.sortBy(_._1)
-          Source(sorted.map(x => x._1 -> ByteString(x._2))).runWith(dumpBytes)
+          Source(sorted.map(x => x._1 -> ByteString(x._2)))
+            .runWith(dumpBytes.mapMaterializedValue(_.map(_._1)))
         }
     }
 
@@ -202,7 +204,8 @@ package object flatjoin_akka {
         .groupedWeightedWithin(writeBufferSize, 2 seconds)(_._2.size)
         .mapAsync(1) { group =>
           val sorted = group.sortBy(_._1)
-          Source(sorted.map(x => x._1 -> x._2)).runWith(dumpBytes)
+          Source(sorted.map(x => x._1 -> x._2))
+            .runWith(dumpBytes.mapMaterializedValue(_.map(_._1)))
         }
     }
 
@@ -265,7 +268,7 @@ package object flatjoin_akka {
     }
 
     def bucket[T: Format: StringKey](toBucket: String => String)(
-        implicit ec: ExecutionContext): Flow[T, File, NotUsed] = {
+        implicit ec: ExecutionContext): Flow[T, (File, Long), NotUsed] = {
 
       def bubble[In, Out1, Out2](flow1: Flow[In, Out1, _],
                                  flow2: Flow[In, Out2, _]) =
@@ -282,8 +285,9 @@ package object flatjoin_akka {
             FlowShape(broadcast.in, zip.out)
         })
 
-      def dumpToBucket
-        : Flow[(String, List[(String, ByteString)]), (File, String), _] = {
+      def dumpToBucket: Flow[(String, List[(String, ByteString)]),
+                             ((File, Long), String),
+                             _] = {
         val head = Flow[(String, List[(String, ByteString)])]
           .map(elem => elem._1)
           .take(1)
@@ -303,7 +307,7 @@ package object flatjoin_akka {
           val buck = toBucket(key)
           (data, buck, key)
         }
-        .groupedWeightedWithin(writeBufferSize, 2 seconds)(_._1.length)
+        .groupedWeightedWithin(mergeReadBufferSize, 2 seconds)(_._1.length)
         .mapConcat { group =>
           group
             .groupBy(_._2)
@@ -395,19 +399,20 @@ package object flatjoin_akka {
     def bucketSort[T: StringKey: Format](toBucket: String => String)(
         implicit am: Materializer): Flow[T, T, NotUsed] = {
       import am.executionContext
-      bucket(toBucket).flatMapConcat { bucketFile =>
-        if (bucketFile.length > writeBufferSize)
-          readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize) via sortInBatches2 via merge(
-            readFileThenDelete(_, bufferSize = mergeReadBufferSize))
-        else
-          readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize)
-            .grouped(Int.MaxValue)
-            .mapConcat { group =>
-              group
-                .sortBy(_._1)
-                .map(data =>
-                  implicitly[Format[T]].fromBytes(data._2.asByteBuffer))
-            }
+      bucket(toBucket).flatMapConcat {
+        case (bucketFile, bucketFileSize) =>
+          if (bucketFileSize > writeBufferSize)
+            readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize) via sortInBatches2 via merge(
+              readFileThenDelete(_, bufferSize = mergeReadBufferSize))
+          else
+            readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize)
+              .grouped(Int.MaxValue)
+              .mapConcat { group =>
+                group
+                  .sortBy(_._1)
+                  .map(data =>
+                    implicitly[Format[T]].fromBytes(data._2.asByteBuffer))
+              }
 
       }
 

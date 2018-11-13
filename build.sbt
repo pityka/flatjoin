@@ -44,7 +44,7 @@ lazy val akkastream = (project in file("akka-stream"))
   .settings(
     name := "flatjoin-akka-stream",
     libraryDependencies ++= Seq(
-      "com.typesafe.akka" %% "akka-stream" % "2.5.11",
+      "com.typesafe.akka" %% "akka-stream" % "2.5.18",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test")
   )
   .dependsOn(core)

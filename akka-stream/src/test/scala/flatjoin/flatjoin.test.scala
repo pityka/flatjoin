@@ -126,7 +126,7 @@ class Flat extends FunSpec with Matchers {
   describe("sort") {
     it("small") {
       val a1 = List("a", "a", "b", "c", "d", "e", "h", "h").reverse
-      val sortFlow = Instance().sort[String]
+      val sortFlow = Instance().sort[String](1)
       val f =
         Await.result(Source(a1).via(sortFlow).runWith(Sink.seq), 20 seconds)
       f should equal(List("a", "a", "b", "c", "d", "e", "h", "h"))
@@ -136,7 +136,7 @@ class Flat extends FunSpec with Matchers {
   describe("bucket sort") {
     it("small") {
       val a1 = List("a", "a", "b", "c", "d", "e", "h", "h").reverse
-      val sortFlow = Instance().bucketSort[String](_ match {
+      val sortFlow = Instance().bucketSort[String](1)(_ match {
         case "a" =>
           "b"
         case _ =>

@@ -51,7 +51,7 @@ class Flat extends FunSpec with Matchers {
     }
   }
 
-  implicit val formatInt = new Format[(Int, Int)] {
+  implicit val formatInt2 = new Format[(Int, Int)] {
     def toBytes(e: (Int, Int)): ByteBuffer = {
       val str = (e._1.toString + "," + e._2).getBytes("UTF-8")
       ByteBuffer.wrap(str)
@@ -83,6 +83,20 @@ class Flat extends FunSpec with Matchers {
       val str = new String(ba.array)
       val spl = str.split(",")
       spl(0).toInt -> spl(1).head
+    }
+  }
+  implicit val formatInt = new Format[Int] {
+    def toBytes(e: Int): ByteBuffer = {
+      val str = e.toString.getBytes("UTF-8")
+      ByteBuffer.wrap(str)
+    }
+    def fromBytes(bb: ByteBuffer): Int = {
+      val ba = ByteBuffer.allocate(bb.remaining)
+      while (ba.hasRemaining) {
+        ba.put(bb.get)
+      }
+      val str = new String(ba.array)
+      str.toInt
     }
   }
 
@@ -239,7 +253,7 @@ class Flat extends FunSpec with Matchers {
           .result(concatSources(sources)
                     .via(Instance().outerJoinByShards(4, 6, 6))
                     .runWith(Sink.seq),
-                  60 seconds)
+                  10 seconds)
           .map(_.toVector)
           .toList
       f.sortBy(_.hashCode) should equal(expectedJoin.sortBy(_.hashCode))
@@ -249,7 +263,7 @@ class Flat extends FunSpec with Matchers {
 
       Await.result(
         concatSources(List(it1, it2))
-          .via(Instance().outerJoinByShards(2, 6, 2))
+          .via(Instance().outerJoinByShards[Int](2, 6, 2))
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
             if (idx < 500) joined(1) should equal(None)

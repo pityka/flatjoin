@@ -581,6 +581,19 @@ package object flatjoin_akka {
 
     def groupByShardsInMemory[T: StringKey](
         parallelismShard: Int,
+        parallelismJoin: Int
+    )(
+        implicit f: Format[T],
+        mat: Materializer
+    ): Flow[T, Seq[T], NotUsed] = {
+      Flow[T]
+        .map((0, _))
+        .via(groupByShardsInMemory(parallelismShard, parallelismJoin, 1))
+        .map(_.map(_._2))
+    }
+
+    def groupByShardsInMemory[T: StringKey](
+        parallelismShard: Int,
         parallelismJoin: Int,
         maxGroups: Int
     )(

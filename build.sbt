@@ -49,17 +49,6 @@ lazy val akkastream = (project in file("akka-stream"))
   )
   .dependsOn(core)
 
-lazy val fs2 = (project in file("fs2"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "flatjoin-fs2",
-    libraryDependencies ++= Seq(
-      "co.fs2" %% "fs2-io" % "0.9.5",
-      "org.scodec" %% "scodec-stream" % "1.0.1",
-      "org.scalatest" %% "scalatest" % "3.0.0" % "test")
-  )
-  .dependsOn(core)
-
 lazy val boopickle = (project in file("boopickle"))
   .settings(commonSettings: _*)
   .settings(

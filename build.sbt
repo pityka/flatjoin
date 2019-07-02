@@ -64,8 +64,8 @@ lazy val circe = (project in file("circe"))
     name := "flatjoin-circe",
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
-      "io.circe" %% "circe-core" % "0.8.0",
-      "io.circe" %% "circe-parser" % "0.8.0"
+      "io.circe" %% "circe-core" % "0.11.1",
+      "io.circe" %% "circe-parser" % "0.11.1"
     )
   )
   .dependsOn(core, iterator)
@@ -86,7 +86,7 @@ lazy val jsoniter = (project in file("jsoniter"))
     name := "flatjoin-jsoniter",
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "macros" % "0.23.0")
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "0.51.3" % Provided)
   )
   .dependsOn(core, iterator)
 

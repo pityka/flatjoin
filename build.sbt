@@ -28,7 +28,7 @@ lazy val root = (project in file("."))
     name := "flatjoin",
     publishArtifact := false
   )
-  .aggregate(core, upickle, akkastream, iterator, circe, jsoniter)
+  .aggregate(core, upickle, akkastream, circe, jsoniter)
 
 lazy val core = (project in file("core"))
   .settings(commonSettings: _*)
@@ -68,7 +68,7 @@ lazy val circe = (project in file("circe"))
       "io.circe" %% "circe-parser" % "0.11.1"
     )
   )
-  .dependsOn(core, iterator)
+  .dependsOn(core, iterator % "test")
 
 lazy val upickle = (project in file("upickle"))
   .settings(commonSettings: _*)
@@ -78,7 +78,7 @@ lazy val upickle = (project in file("upickle"))
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
       "com.lihaoyi" %% "upickle" % "0.4.4")
   )
-  .dependsOn(core, iterator)
+  .dependsOn(core, iterator % "test")
 
 lazy val jsoniter = (project in file("jsoniter"))
   .settings(commonSettings: _*)
@@ -88,6 +88,6 @@ lazy val jsoniter = (project in file("jsoniter"))
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "0.51.3" % Provided)
   )
-  .dependsOn(core, iterator)
+  .dependsOn(core, iterator % "test")
 
 scalafmtOnCompile in ThisBuild := true

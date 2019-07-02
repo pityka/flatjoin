@@ -2,7 +2,6 @@ package flatjoin
 
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import java.nio.ByteBuffer
-import flatjoin_iterator._
 
 object jsoniterformat {
   implicit def format[T: JsonValueCodec] = new Format[T] {

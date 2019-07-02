@@ -703,14 +703,14 @@ package object flatjoin_akka {
 
     def outerJoinGrouped[T](
         columns: Int
-    ): Flow[Seq[(Int, T)], Seq[Option[T]], NotUsed] =
-      Flow[Seq[(Int, T)]].mapConcat { group =>
+    ): Flow[Seq[(Int, T)], Seq[Seq[Option[T]]], NotUsed] =
+      Flow[Seq[(Int, T)]].map { group =>
         crossGroup(group, columns).toList
       }
 
     def outerJoinInMemory[T: StringKey](
         columns: Int
-    ): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
+    ): Flow[(Int, T), Seq[Seq[Option[T]]], NotUsed] = {
       implicit val sk = new StringKey[(Int, T)] {
         def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
       }
@@ -728,7 +728,7 @@ package object flatjoin_akka {
     )(
         implicit f: Format[T],
         mat: Materializer
-    ): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
+    ): Flow[(Int, T), Seq[Seq[Option[T]]], NotUsed] = {
       implicit val sk = new StringKey[(Int, T)] {
         def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
       }
@@ -741,7 +741,7 @@ package object flatjoin_akka {
 
     def outerJoinSorted[T: StringKey](
         columns: Int
-    ): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
+    ): Flow[(Int, T), Seq[Seq[Option[T]]], NotUsed] = {
       implicit val sk = new StringKey[(Int, T)] {
         def key(i: (Int, T)) = implicitly[StringKey[T]].key(i._2)
       }
@@ -751,7 +751,7 @@ package object flatjoin_akka {
     def sortAndOuterJoin[T: StringKey](columns: Int)(
         implicit f: Format[(Int, T)],
         mat: Materializer
-    ): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
+    ): Flow[(Int, T), Seq[Seq[Option[T]]], NotUsed] = {
       import mat.executionContext
       implicit val sk = new StringKey[(Int, T)] {
         def key(i: (Int, T)) = implicitly[StringKey[T]].key(i._2)
@@ -766,7 +766,7 @@ package object flatjoin_akka {
     )(
         implicit f: Format[(Int, T)],
         mat: Materializer
-    ): Flow[(Int, T), Seq[Option[T]], NotUsed] = {
+    ): Flow[(Int, T), Seq[Seq[Option[T]]], NotUsed] = {
       implicit val sk = new StringKey[(Int, T)] {
         def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
       }

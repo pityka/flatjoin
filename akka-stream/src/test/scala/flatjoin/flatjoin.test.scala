@@ -113,22 +113,24 @@ class Flat extends FunSpec with Matchers {
   val a3 = List("e", "f", "g", "h", "h", "i", "j", "k")
 
   val expectedJoin = List(
-    Vector(Some("a"), None, None, None),
-    Vector(Some("a"), None, None, None),
-    Vector(Some("b"), None, None, None),
-    Vector(Some("c"), Some("c"), None, None),
-    Vector(Some("d"), Some("d"), None, None),
-    Vector(Some("e"), Some("e"), None, Some("e")),
-    Vector(Some("e"), Some("e"), None, Some("e")),
-    Vector(None, Some("f"), None, Some("f")),
-    Vector(None, Some("g"), None, Some("g")),
-    Vector(Some("h"), Some("h"), None, Some("h")),
-    Vector(Some("h"), Some("h"), None, Some("h")),
-    Vector(Some("h"), Some("h"), None, Some("h")),
-    Vector(Some("h"), Some("h"), None, Some("h")),
-    Vector(None, None, None, Some("i")),
-    Vector(None, None, None, Some("j")),
-    Vector(None, None, None, Some("k"))
+    Seq(Vector(Some("a"), None, None, None),
+        Vector(Some("a"), None, None, None)),
+    Seq(Vector(Some("b"), None, None, None)),
+    Seq(Vector(Some("c"), Some("c"), None, None)),
+    Seq(Vector(Some("d"), Some("d"), None, None)),
+    Seq(Vector(Some("e"), Some("e"), None, Some("e")),
+        Vector(Some("e"), Some("e"), None, Some("e"))),
+    Seq(Vector(None, Some("f"), None, Some("f"))),
+    Seq(Vector(None, Some("g"), None, Some("g"))),
+    Seq(
+      Vector(Some("h"), Some("h"), None, Some("h")),
+      Vector(Some("h"), Some("h"), None, Some("h")),
+      Vector(Some("h"), Some("h"), None, Some("h")),
+      Vector(Some("h"), Some("h"), None, Some("h"))
+    ),
+    Seq(Vector(None, None, None, Some("i"))),
+    Seq(Vector(None, None, None, Some("j"))),
+    Seq(Vector(None, None, None, Some("k")))
   )
 
   val N = 1000000
@@ -200,6 +202,7 @@ class Flat extends FunSpec with Matchers {
       Await.result(
         concatSources(List(it1, it2))
           .via(Instance().sortAndOuterJoin(2))
+          .mapConcat(_.toList)
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
             if (idx < 500) joined(1) should equal(None)
@@ -232,6 +235,7 @@ class Flat extends FunSpec with Matchers {
       Await.result(
         concatSources(List(it1, it2))
           .via(Instance().outerJoinBySortingShards(2, 6, 6))
+          .mapConcat(_.toList)
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
             if (idx < 500) joined(1) should equal(None)
@@ -264,6 +268,7 @@ class Flat extends FunSpec with Matchers {
       Await.result(
         concatSources(List(it1, it2))
           .via(Instance().outerJoinByShards[Int](2, 6, 2))
+          .mapConcat(_.toList)
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
             if (idx < 500) joined(1) should equal(None)

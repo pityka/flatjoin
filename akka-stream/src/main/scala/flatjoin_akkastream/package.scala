@@ -566,13 +566,22 @@ package object flatjoin_akka {
 
       shard[T](parallelismShard)
         .flatMapConcat { (shards: Seq[(Int, File)]) =>
-          Source(shards.toList.map(_._2)).via(
-            balancerUnordered(
-              groupShardsBySorting,
-              parallelismJoin,
-              groupSize = 256
+          Source(shards.toList.map(_._2))
+            .via(
+              balancerUnordered(
+                groupShardsBySorting,
+                parallelismJoin,
+                groupSize = 256
+              )
             )
-          )
+            .watchTermination() {
+              case (mat, future) =>
+                future.onComplete {
+                  case _ =>
+                    shards.foreach(_._2.delete)
+                }
+                mat
+            }
 
         }
         .mapMaterializedValue(_ => NotUsed)
@@ -652,6 +661,14 @@ package object flatjoin_akka {
               )
             )
             .mapConcat(_.toList)
+            .watchTermination() {
+              case (mat, future) =>
+                future.onComplete {
+                  case _ =>
+                    shards.foreach(_.foreach(_._2.delete))
+                }
+                mat
+            }
 
         }
         .mapMaterializedValue(_ => NotUsed)

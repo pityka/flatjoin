@@ -147,7 +147,15 @@ package object flatjoin_akka {
             .toPath(tmp.toPath)
             .addAttributes(Attributes.inputBuffer(initial = 1, max = 1))
             .mapMaterializedValue(
-              _.filter(_.wasSuccessful).map(ioResult => (tmp, ioResult.count))
+              _.transform {
+                case Success(ioResult) if ioResult.status.isSuccess =>
+                  Success((tmp, ioResult.count))
+                case Success(ioResult) =>
+                  logger.error(s"temp file sink failed. ${ioResult.status}",
+                               ioResult.status.failed.get)
+                  Failure(ioResult.status.failed.get)
+                case fail => Failure(fail.failed.get)
+              }
             )
         )
 

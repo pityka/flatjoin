@@ -142,7 +142,7 @@ class Flat extends FunSpec with Matchers {
   describe("sort") {
     it("small") {
       val a1 = List("a", "a", "b", "c", "d", "e", "h", "h").reverse
-      val sortFlow = Instance().sort[String](1)
+      val sortFlow = Instance().sort[String]
       val f =
         Await.result(Source(a1).via(sortFlow).runWith(Sink.seq), 20 seconds)
       f should equal(List("a", "a", "b", "c", "d", "e", "h", "h"))
@@ -152,7 +152,7 @@ class Flat extends FunSpec with Matchers {
   describe("bucket sort") {
     it("small") {
       val a1 = List("a", "a", "b", "c", "d", "e", "h", "h").reverse
-      val sortFlow = Instance().bucketSort[String](1)(_ match {
+      val sortFlow = Instance().bucketSort[String](_ match {
         case "a" =>
           "b"
         case _ =>
@@ -222,7 +222,7 @@ class Flat extends FunSpec with Matchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(Instance().outerJoinBySortingShards(4, 6, 6))
+                    .via(Instance().outerJoinBySortingShards(4))
                     .runWith(Sink.seq),
                   20 seconds)
           .map(_.toVector)
@@ -234,7 +234,7 @@ class Flat extends FunSpec with Matchers {
 
       Await.result(
         concatSources(List(it1, it2))
-          .via(Instance().outerJoinBySortingShards(2, 6, 6))
+          .via(Instance().outerJoinBySortingShards(2))
           .mapConcat(_.toList)
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
@@ -255,7 +255,7 @@ class Flat extends FunSpec with Matchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(Instance().outerJoinByShards(4, 6, 6))
+                    .via(Instance().outerJoinByShards(4))
                     .runWith(Sink.seq),
                   10 seconds)
           .map(_.toVector)
@@ -267,7 +267,7 @@ class Flat extends FunSpec with Matchers {
 
       Await.result(
         concatSources(List(it1, it2))
-          .via(Instance().outerJoinByShards[Int](2, 6, 2))
+          .via(Instance().outerJoinByShards[Int](2))
           .mapConcat(_.toList)
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
@@ -286,9 +286,8 @@ class Flat extends FunSpec with Matchers {
       val source = Source(List("a", "a", "b", "b", "b", "a"))
 
       Await
-        .result(
-          source.via(Instance().groupBySortingShards(2, 2)).runWith(Sink.seq),
-          atMost = 5 seconds)
+        .result(source.via(Instance().groupBySortingShards).runWith(Sink.seq),
+                atMost = 5 seconds)
         .toSet should equal(Set(List("a", "a", "a"), List("b", "b", "b")))
     }
   }

@@ -183,7 +183,12 @@ package object flatjoin_akka {
       mergeReadBufferSize: Int = 1024 * 1024 * 10,
       parallelMerges: Int = 1,
       mergeMaxOpenFiles: Int = 50,
-      compressionLevel: Int = 1
+      compressionLevel: Int = 1,
+      numberOfShards: Int = 128,
+      numberOfBatchesSortedInParallel: Int = 1,
+      parallelismOfShardComputation: Int = 1,
+      numberOfBucketsSortedInParallel: Int = 1,
+      numberOfShardsJoinedInParallel: Int = 1
   ) {
 
     def dump[T: Format: StringKey](
@@ -217,7 +222,7 @@ package object flatjoin_akka {
         .toMat(fileSink)(Keep.right)
     }
 
-    def sortInBatches[T: StringKey](parallelism: Int)(
+    def sortInBatches[T: StringKey](
         implicit am: Materializer,
         sk: StringKey[T],
         fmt: Format[T]
@@ -232,7 +237,7 @@ package object flatjoin_akka {
         .map(_.toArray)
         .via(
           (Flow[Array[(String, ByteBuffer)]]
-            .mapAsync(parallelism) { group =>
+            .mapAsync(numberOfBatchesSortedInParallel) { group =>
               scala.util.Sorting.quickSort(group)(Ordering.by(_._1))
               Source
                 .fromIterator(
@@ -246,16 +251,15 @@ package object flatjoin_akka {
         .map(_.get)
     }
 
-    def sortInBatches2(
-        parallelism: Int
-    )(implicit am: Materializer): Flow[(String, ByteString), File, NotUsed] = {
+    def sortInBatches2(implicit am: Materializer)
+      : Flow[(String, ByteString), File, NotUsed] = {
       import am.executionContext
       Flow[(String, ByteString)]
         .groupedWeightedWithin(writeBufferSize, 2 seconds)(_._2.size)
         .map(_.toArray)
         .via(
           (Flow[Array[(String, ByteString)]]
-            .mapAsync(parallelism) { group =>
+            .mapAsync(numberOfBatchesSortedInParallel) { group =>
               scala.util.Sorting.quickSort(group)(Ordering.by(_._1))
               Source
                 .fromIterator(() => group.iterator.map(x => x._1 -> x._2))
@@ -404,13 +408,12 @@ package object flatjoin_akka {
     }
 
     def shard[T: Format: StringKey](
-        parallelism: Int
-    )(implicit ec: ExecutionContext): Flow[T, Seq[(Int, File)], NotUsed] = {
+        implicit ec: ExecutionContext): Flow[T, Seq[(Int, File)], NotUsed] = {
 
       val hash = (t: T) =>
         math.abs(
           scala.util.hashing.MurmurHash3
-            .stringHash(implicitly[StringKey[T]].key(t)) % 128
+            .stringHash(implicitly[StringKey[T]].key(t)) % numberOfShards
       )
 
       val shardFlow
@@ -423,7 +426,7 @@ package object flatjoin_akka {
               val flows: List[
                 (Int, Flow[(String, ByteString, Int), (Int, File), _])
               ] =
-                (0 until 128).map {
+                (0 until numberOfShards).map {
                   idx =>
                     (
                       idx,
@@ -461,38 +464,34 @@ package object flatjoin_akka {
           )
           .fold(List.empty[(Int, File)])(_ :+ _)
 
-      // parallelize[T, (String, ByteString, Int)](parallelism, 3000)
-      Flow[T]
-        .map {
-          case elem =>
-            (
-              implicitly[StringKey[T]].key(elem),
-              ByteString(implicitly[Format[T]].toBytes(elem)),
-              hash(elem)
-            )
-        }
-        .viaMat(shardFlow)(Keep.right)
+      parallelize[T, (String, ByteString, Int)](parallelismOfShardComputation,
+                                                3000) {
+        case elem =>
+          (
+            implicitly[StringKey[T]].key(elem),
+            ByteString(implicitly[Format[T]].toBytes(elem)),
+            hash(elem)
+          )
+      }.viaMat(shardFlow)(Keep.right)
     }
 
     def sort[T: StringKey: Format](
-        parallelism: Int
-    )(implicit am: Materializer): Flow[T, T, NotUsed] = {
+        implicit am: Materializer): Flow[T, T, NotUsed] = {
       import am.executionContext
-      sortInBatches[T](parallelism) via merge[T](
+      sortInBatches[T] via merge[T](
         readFileThenDelete(_, bufferSize = mergeReadBufferSize)
       )
     }
 
-    def bucketSort[T: StringKey: Format](parallelism: Int)(
+    def bucketSort[T: StringKey: Format](
         toBucket: String => String
     )(implicit am: Materializer): Flow[T, T, NotUsed] = {
       import am.executionContext
 
       def sortBucket(bucketFile: File, bucketFileSize: Long) = {
         if (bucketFileSize > writeBufferSize)
-          readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize) via sortInBatches2(
-            1
-          ) via merge(readFileThenDelete(_, bufferSize = mergeReadBufferSize))
+          readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize) via sortInBatches2 via merge(
+            readFileThenDelete(_, bufferSize = mergeReadBufferSize))
         else
           readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize)
             .grouped(Int.MaxValue)
@@ -508,13 +507,13 @@ package object flatjoin_akka {
             }
       }
 
-      if (parallelism == 1)
+      if (numberOfBucketsSortedInParallel == 1)
         bucket(toBucket).flatMapConcat {
           case (bucket, bucketFileSize) =>
             sortBucket(bucket, bucketFileSize)
         } else
         bucket(toBucket)
-          .mapAsync(parallelism) {
+          .mapAsync(numberOfBucketsSortedInParallel) {
             case (bucket, bucketFileSize) =>
               sortBucket(bucket, bucketFileSize).runWith(Sink.seq)
           }
@@ -527,7 +526,7 @@ package object flatjoin_akka {
         mat: Materializer
     ): Flow[(String, ByteString), Seq[T], NotUsed] = {
       import mat.executionContext
-      sortInBatches2(1) via merge[T](
+      sortInBatches2 via merge[T](
         readFileThenDelete(_, bufferSize = mergeReadBufferSize)
       ) via adjacentSpan
     }
@@ -567,18 +566,17 @@ package object flatjoin_akka {
     }
 
     def groupBySortingShards[T: StringKey](
-        parallelismShard: Int,
-        parallelismJoin: Int
-    )(implicit f: Format[T], mat: Materializer): Flow[T, Seq[T], NotUsed] = {
+        implicit f: Format[T],
+        mat: Materializer): Flow[T, Seq[T], NotUsed] = {
       import mat.executionContext
 
-      shard[T](parallelismShard)
+      shard[T]
         .flatMapConcat { (shards: Seq[(Int, File)]) =>
           Source(shards.toList.map(_._2))
             .via(
               balancerUnordered(
                 groupShardsBySorting,
-                parallelismJoin,
+                numberOfShardsJoinedInParallel,
                 groupSize = 256
               )
             )
@@ -597,21 +595,17 @@ package object flatjoin_akka {
     }
 
     def groupByShardsInMemory[T: StringKey](
-        parallelismShard: Int,
-        parallelismJoin: Int
-    )(
+        )(
         implicit f: Format[T],
         mat: Materializer
     ): Flow[T, Seq[T], NotUsed] = {
       Flow[T]
         .map((0, _))
-        .via(groupByShardsInMemory(parallelismShard, parallelismJoin, 1))
+        .via(groupByShardsInMemory(1))
         .map(_.map(_._2))
     }
 
     def groupByShardsInMemory[T: StringKey](
-        parallelismShard: Int,
-        parallelismJoin: Int,
         maxGroups: Int
     )(
         implicit f: Format[T],
@@ -639,7 +633,7 @@ package object flatjoin_akka {
 
       Flow[(Int, T)]
         .groupBy(maxSubstreams = maxGroups, _._1)
-        .via(byPass(shard[T](parallelismShard)))
+        .via(byPass(shard[T]))
         .mergeSubstreams
         .grouped(maxGroups)
         .flatMapConcat { groups =>
@@ -664,7 +658,7 @@ package object flatjoin_akka {
             .via(
               balancerUnordered(
                 groupShardsByHashMap,
-                parallelismJoin,
+                numberOfShardsJoinedInParallel,
                 groupSize = 1
               )
             )
@@ -747,9 +741,7 @@ package object flatjoin_akka {
     }
 
     def outerJoinByShards[T: StringKey](
-        columns: Int,
-        parallelismShard: Int,
-        parallelismJoin: Int
+        columns: Int
     )(
         implicit f: Format[T],
         mat: Materializer
@@ -759,7 +751,7 @@ package object flatjoin_akka {
       }
       Flow[(Int, T)]
         .via(
-          groupByShardsInMemory[T](parallelismShard, parallelismJoin, columns)
+          groupByShardsInMemory[T](columns)
         )
         .via(outerJoinGrouped(columns))
     }
@@ -781,13 +773,11 @@ package object flatjoin_akka {
       implicit val sk = new StringKey[(Int, T)] {
         def key(i: (Int, T)) = implicitly[StringKey[T]].key(i._2)
       }
-      Flow[(Int, T)].via(sort[(Int, T)](1)).via(outerJoinSorted(columns))
+      Flow[(Int, T)].via(sort[(Int, T)]).via(outerJoinSorted(columns))
     }
 
     def outerJoinBySortingShards[T: StringKey](
-        columns: Int,
-        parallelismShards: Int,
-        parallelismJoin: Int
+        columns: Int
     )(
         implicit f: Format[(Int, T)],
         mat: Materializer
@@ -796,7 +786,7 @@ package object flatjoin_akka {
         def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
       }
       Flow[(Int, T)]
-        .via(groupBySortingShards[(Int, T)](parallelismShards, parallelismJoin))
+        .via(groupBySortingShards[(Int, T)])
         .via(outerJoinGrouped(columns))
     }
 

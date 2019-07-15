@@ -297,7 +297,7 @@ class Flat extends FunSpec with Matchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(Instance().joinByShards(4, Set(0, 1, 3)))
+                    .via(Instance().joinByShards(4, List(0, 1, 3)))
                     .runWith(Sink.seq),
                   10 seconds)
           .map(_.toVector)
@@ -309,7 +309,7 @@ class Flat extends FunSpec with Matchers {
 
       Await.result(
         concatSources(List(it1, it2))
-          .via(Instance().joinByShards[Int](2, Set(1)))
+          .via(Instance().joinByShards[Int](2, List(1)))
           .mapConcat(_.toList)
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
@@ -324,7 +324,7 @@ class Flat extends FunSpec with Matchers {
 
       Await.result(
         concatSources(List(it1, it2))
-          .via(Instance().joinByShards[Int](2, Set(0)))
+          .via(Instance().joinByShards[Int](2, List(0)))
           .mapConcat(_.toList)
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get

@@ -598,13 +598,13 @@ package object flatjoin_akka {
     ): Flow[T, Seq[T], NotUsed] = {
       Flow[T]
         .map((0, _))
-        .via(groupByShardsInMemory(1, Set.empty))
+        .via(groupByShardsInMemory(1, Nil))
         .map(_.map(_._2))
     }
 
     def groupByShardsInMemory[T: StringKey](
         maxGroups: Int,
-        requireAllTheseColumns: Set[Int]
+        requireAllTheseColumns: List[Int] = Nil
     )(
         implicit f: Format[T],
         mat: Materializer
@@ -756,7 +756,7 @@ package object flatjoin_akka {
 
     def joinByShards[T: StringKey](
         columns: Int,
-        requireAllTheseColumns: Set[Int] = Set.empty
+        requireAllTheseColumns: List[Int] = Nil
     )(
         implicit f: Format[T],
         mat: Materializer

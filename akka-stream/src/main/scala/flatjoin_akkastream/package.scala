@@ -79,12 +79,11 @@ package object flatjoin_akka {
 
   def deserialize[T: Format](
       implicit am: Materializer
-  ): Flow[(String, ByteString), T, _] = {
+  ): Flow[ByteString, T, _] = {
     import am.executionContext
-    Flow[(String, ByteString)]
-      .map {
-        case (_, data) =>
-          implicitly[Format[T]].fromBytes(data.asByteBuffer)
+    Flow[ByteString]
+      .map { data =>
+        implicitly[Format[T]].fromBytes(data.asByteBuffer)
       }
   }
 
@@ -541,13 +540,13 @@ package object flatjoin_akka {
       }
     }
 
-    def groupShardsByHashMap[T: StringKey](
-        implicit f: Format[T],
+    def groupShardsByHashMap(
+        implicit
         mat: Materializer
-    ): Flow[Seq[(Int, File)], Seq[Seq[(Int, T)]], NotUsed] = {
+    ): Flow[Seq[(Int, File)], Seq[Seq[(Int, (String, ByteString))]], NotUsed] = {
       import mat.executionContext
-      implicit val sk2 = new StringKey[(Int, T)] {
-        def key(a: (Int, T)) = implicitly[StringKey[T]].key(a._2)
+      implicit val sk2 = new StringKey[(Int, (String, ByteString))] {
+        def key(a: (Int, (String, ByteString))) = a._2._1
       }
       Flow[Seq[(Int, File)]]
         .flatMapConcat {
@@ -556,11 +555,10 @@ package object flatjoin_akka {
               .flatMapConcat {
                 case (idx, file) =>
                   readFileThenDelete(file, mergeReadBufferSize)
-                    .via(deserialize[T])
-                    .map(t => (idx, t))
+                    .map { case (key, data) => (idx, (key, data)) }
 
               }
-              .via(groupWithHashMap[(Int, T)])
+              .via(groupWithHashMap[(Int, (String, ByteString))])
         }
 
     }
@@ -663,6 +661,13 @@ package object flatjoin_akka {
               )
             )
             .mapConcat(_.toList)
+            .map {
+              case group =>
+                group.map {
+                  case (column, (_, data)) =>
+                    (column, f.fromBytes(data.asByteBuffer))
+                }
+            }
             .watchTermination() {
               case (mat, future) =>
                 future.onComplete {

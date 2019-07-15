@@ -543,7 +543,7 @@ package object flatjoin_akka {
     def groupShardsByHashMap(
         implicit
         mat: Materializer
-    ): Flow[Seq[(Int, File)], Seq[Seq[(Int, (String, ByteString))]], NotUsed] = {
+    ): Flow[Seq[(Int, File)], Seq[(Int, (String, ByteString))], NotUsed] = {
       import mat.executionContext
       implicit val sk2 = new StringKey[(Int, (String, ByteString))] {
         def key(a: (Int, (String, ByteString))) = a._2._1
@@ -660,7 +660,6 @@ package object flatjoin_akka {
                 groupSize = 1
               )
             )
-            .mapConcat(_.toList)
             .map {
               case group =>
                 group.map {
@@ -682,10 +681,10 @@ package object flatjoin_akka {
 
     }
 
-    def groupWithHashMap[T: StringKey]: Flow[T, Seq[Seq[T]], NotUsed] =
-      Flow.fromGraph(new GraphStage[FlowShape[T, Seq[Seq[T]]]] {
+    def groupWithHashMap[T: StringKey]: Flow[T, Seq[T], NotUsed] =
+      Flow.fromGraph(new GraphStage[FlowShape[T, Seq[T]]] {
         val in: Inlet[T] = Inlet("groupInMemory.in")
-        val out: Outlet[Seq[Seq[T]]] = Outlet("groupInMemory.out")
+        val out: Outlet[Seq[T]] = Outlet("groupInMemory.out")
 
         import scala.collection.mutable.{ArrayBuffer, AnyRefMap}
 
@@ -697,12 +696,20 @@ package object flatjoin_akka {
             var mmap =
               AnyRefMap[String, ArrayBuffer[T]]()
 
+            override def postStop = {
+              mmap = null
+            }
+
             setHandler(
               in,
               new InHandler {
                 override def onUpstreamFinish(): Unit = {
-                  emit(out, mmap.values.toList)
-                  mmap = null
+                  val iterator = mmap.iterator.map {
+                    case (key, value) =>
+                      mmap.remove(key)
+                      value
+                  }
+                  emitMultiple(out, iterator)
                   complete(out)
                 }
                 override def onPush(): Unit = {
@@ -741,7 +748,6 @@ package object flatjoin_akka {
 
       Flow[(Int, T)]
         .via(groupWithHashMap[(Int, T)])
-        .mapConcat(_.toList)
         .via(outerJoinGrouped(columns))
     }
 

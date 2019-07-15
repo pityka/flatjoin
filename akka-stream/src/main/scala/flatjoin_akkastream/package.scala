@@ -593,18 +593,18 @@ package object flatjoin_akka {
     }
 
     def groupByShardsInMemory[T: StringKey](
-        )(
         implicit f: Format[T],
         mat: Materializer
     ): Flow[T, Seq[T], NotUsed] = {
       Flow[T]
         .map((0, _))
-        .via(groupByShardsInMemory(1))
+        .via(groupByShardsInMemory(1, Set.empty))
         .map(_.map(_._2))
     }
 
     def groupByShardsInMemory[T: StringKey](
-        maxGroups: Int
+        maxGroups: Int,
+        requireAllTheseColumns: Set[Int]
     )(
         implicit f: Format[T],
         mat: Materializer
@@ -662,10 +662,13 @@ package object flatjoin_akka {
             )
             .map {
               case group =>
-                group.map {
-                  case (column, (_, data)) =>
-                    (column, f.fromBytes(data.asByteBuffer))
-                }
+                val keepGroup = requireAllTheseColumns.isEmpty || requireAllTheseColumns
+                  .forall(i => group.exists(_._1 == i))
+                if (keepGroup)
+                  group.map {
+                    case (column, (_, data)) =>
+                      (column, f.fromBytes(data.asByteBuffer))
+                  } else Nil
             }
             .watchTermination() {
               case (mat, future) =>
@@ -735,7 +738,7 @@ package object flatjoin_akka {
     def outerJoinGrouped[T](
         columns: Int
     ): Flow[Seq[(Int, T)], Seq[Seq[Option[T]]], NotUsed] =
-      Flow[Seq[(Int, T)]].map { group =>
+      Flow[Seq[(Int, T)]].filter(_.nonEmpty).map { group =>
         crossGroup(group, columns).toList
       }
 
@@ -751,8 +754,9 @@ package object flatjoin_akka {
         .via(outerJoinGrouped(columns))
     }
 
-    def outerJoinByShards[T: StringKey](
-        columns: Int
+    def joinByShards[T: StringKey](
+        columns: Int,
+        requireAllTheseColumns: Set[Int] = Set.empty
     )(
         implicit f: Format[T],
         mat: Materializer
@@ -762,7 +766,7 @@ package object flatjoin_akka {
       }
       Flow[(Int, T)]
         .via(
-          groupByShardsInMemory[T](columns)
+          groupByShardsInMemory[T](columns, requireAllTheseColumns)
         )
         .via(outerJoinGrouped(columns))
     }

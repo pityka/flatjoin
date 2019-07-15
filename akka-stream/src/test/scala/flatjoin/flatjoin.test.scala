@@ -132,6 +132,16 @@ class Flat extends FunSpec with Matchers {
     Seq(Vector(None, None, None, Some("j"))),
     Seq(Vector(None, None, None, Some("k")))
   )
+  val expectedInnerJoin = List(
+    Seq(Vector(Some("e"), Some("e"), None, Some("e")),
+        Vector(Some("e"), Some("e"), None, Some("e"))),
+    Seq(
+      Vector(Some("h"), Some("h"), None, Some("h")),
+      Vector(Some("h"), Some("h"), None, Some("h")),
+      Vector(Some("h"), Some("h"), None, Some("h")),
+      Vector(Some("h"), Some("h"), None, Some("h"))
+    )
+  )
 
   val N = 1000000
   val M = 100000
@@ -255,7 +265,7 @@ class Flat extends FunSpec with Matchers {
       val f =
         Await
           .result(concatSources(sources)
-                    .via(Instance().outerJoinByShards(4))
+                    .via(Instance().joinByShards(4))
                     .runWith(Sink.seq),
                   10 seconds)
           .map(_.toVector)
@@ -267,12 +277,58 @@ class Flat extends FunSpec with Matchers {
 
       Await.result(
         concatSources(List(it1, it2))
-          .via(Instance().outerJoinByShards[Int](2))
+          .via(Instance().joinByShards[Int](2))
           .mapConcat(_.toList)
           .runForeach { joined =>
             val idx = joined.find(_.isDefined).get.get
             if (idx < 500) joined(1) should equal(None)
             else if (idx > N) joined(0) should equal(None)
+            else joined(0).get should equal(joined(1).get)
+          },
+        60 seconds
+      )
+
+    }
+  }
+  describe("shard and inner join in memory") {
+    it("small") {
+      val sources = List(a1, a2, Nil, a3).map(x => Source(x))
+
+      val f =
+        Await
+          .result(concatSources(sources)
+                    .via(Instance().joinByShards(4, Set(0, 1, 3)))
+                    .runWith(Sink.seq),
+                  10 seconds)
+          .map(_.toVector)
+          .toList
+      f.sortBy(_.hashCode) should equal(expectedInnerJoin.sortBy(_.hashCode))
+
+    }
+    it("big 1") {
+
+      Await.result(
+        concatSources(List(it1, it2))
+          .via(Instance().joinByShards[Int](2, Set(1)))
+          .mapConcat(_.toList)
+          .runForeach { joined =>
+            val idx = joined.find(_.isDefined).get.get
+            if (idx > N) joined(0) should equal(None)
+            else joined(0).get should equal(joined(1).get)
+          },
+        60 seconds
+      )
+
+    }
+    it("big 0") {
+
+      Await.result(
+        concatSources(List(it1, it2))
+          .via(Instance().joinByShards[Int](2, Set(0)))
+          .mapConcat(_.toList)
+          .runForeach { joined =>
+            val idx = joined.find(_.isDefined).get.get
+            if (idx < 500) joined(1) should equal(None)
             else joined(0).get should equal(joined(1).get)
           },
         60 seconds

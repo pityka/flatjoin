@@ -2,7 +2,7 @@ lazy val commonSettings = Seq(
   organization := "io.github.pityka",
   scalaVersion := "2.12.8",
   crossScalaVersions := Seq("2.12.6", "2.11.11"),
-  version := "0.0.13",
+  version := "0.0.14",
   licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
   publishTo := sonatypePublishTo.value,
   pomExtra in Global := {
@@ -86,7 +86,7 @@ lazy val jsoniter = (project in file("jsoniter"))
     name := "flatjoin-jsoniter",
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "0.51.3" % Provided)
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "0.54.0" % Provided)
   )
   .dependsOn(core, iterator % "test")
 

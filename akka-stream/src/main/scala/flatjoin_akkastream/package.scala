@@ -11,6 +11,7 @@ import flatjoin._
 import java.io.File
 import java.nio._
 import com.typesafe.scalalogging.Logger
+import scala.language.postfixOps
 
 package object flatjoin_akka {
 
@@ -150,8 +151,10 @@ package object flatjoin_akka {
                 case Success(ioResult) if ioResult.status.isSuccess =>
                   Success((tmp, ioResult.count))
                 case Success(ioResult) =>
-                  logger.error(s"temp file sink failed. ${ioResult.status}",
-                               ioResult.status.failed.get)
+                  logger.error(
+                    s"temp file sink failed. ${ioResult.status}",
+                    ioResult.status.failed.get
+                  )
                   Failure(ioResult.status.failed.get)
                 case fail => Failure(fail.failed.get)
               }
@@ -164,7 +167,7 @@ package object flatjoin_akka {
           futureOptionFutureFile.flatMap {
             case Some(f) => f.map(Some(_))
             case None    => Future.successful(None)
-        }
+          }
       )
 
   def tempFile(implicit ec: ExecutionContext): Flow[ByteString, File, _] =
@@ -250,8 +253,9 @@ package object flatjoin_akka {
         .map(_.get)
     }
 
-    def sortInBatches2(implicit am: Materializer)
-      : Flow[(String, ByteString), File, NotUsed] = {
+    def sortInBatches2(
+        implicit am: Materializer
+    ): Flow[(String, ByteString), File, NotUsed] = {
       import am.executionContext
       Flow[(String, ByteString)]
         .groupedWeightedWithin(writeBufferSize, 2 seconds)(_._2.size)
@@ -330,7 +334,7 @@ package object flatjoin_akka {
               s =>
                 merge(s.flatten)(
                   readFileThenDelete(_, bufferSize = mergeReadBufferSize)
-              )
+                )
             )
       }
 
@@ -407,16 +411,17 @@ package object flatjoin_akka {
     }
 
     def shard[T: Format: StringKey](
-        implicit ec: ExecutionContext): Flow[T, Seq[(Int, File)], NotUsed] = {
+        implicit ec: ExecutionContext
+    ): Flow[T, Seq[(Int, File)], NotUsed] = {
 
       val hash = (t: T) =>
         math.abs(
           scala.util.hashing.MurmurHash3
             .stringHash(implicitly[StringKey[T]].key(t)) % numberOfShards
-      )
+        )
 
       val shardFlow
-        : Flow[(String, ByteString, Int), Seq[(Int, File)], NotUsed] =
+          : Flow[(String, ByteString, Int), Seq[(Int, File)], NotUsed] =
         Flow
           .fromGraph(
             GraphDSL.create() { implicit b =>
@@ -463,8 +468,10 @@ package object flatjoin_akka {
           )
           .fold(List.empty[(Int, File)])(_ :+ _)
 
-      parallelize[T, (String, ByteString, Int)](parallelismOfShardComputation,
-                                                3000) {
+      parallelize[T, (String, ByteString, Int)](
+        parallelismOfShardComputation,
+        3000
+      ) {
         case elem =>
           (
             implicitly[StringKey[T]].key(elem),
@@ -475,7 +482,8 @@ package object flatjoin_akka {
     }
 
     def sort[T: StringKey: Format](
-        implicit am: Materializer): Flow[T, T, NotUsed] = {
+        implicit am: Materializer
+    ): Flow[T, T, NotUsed] = {
       import am.executionContext
       sortInBatches[T] via merge[T](
         readFileThenDelete(_, bufferSize = mergeReadBufferSize)
@@ -490,7 +498,8 @@ package object flatjoin_akka {
       def sortBucket(bucketFile: File, bucketFileSize: Long) = {
         if (bucketFileSize > writeBufferSize)
           readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize) via sortInBatches2 via merge(
-            readFileThenDelete(_, bufferSize = mergeReadBufferSize))
+            readFileThenDelete(_, bufferSize = mergeReadBufferSize)
+          )
         else
           readFileThenDelete(bucketFile, bufferSize = mergeReadBufferSize)
             .grouped(Int.MaxValue)
@@ -565,7 +574,8 @@ package object flatjoin_akka {
 
     def groupBySortingShards[T: StringKey](
         implicit f: Format[T],
-        mat: Materializer): Flow[T, Seq[T], NotUsed] = {
+        mat: Materializer
+    ): Flow[T, Seq[T], NotUsed] = {
       import mat.executionContext
 
       shard[T]
@@ -699,7 +709,7 @@ package object flatjoin_akka {
             var mmap =
               AnyRefMap[String, ArrayBuffer[T]]()
 
-            override def postStop = {
+            override def postStop() = {
               mmap = null
             }
 
@@ -710,7 +720,7 @@ package object flatjoin_akka {
                   val iterator = mmap.iterator.map {
                     case (key, value) =>
                       mmap.remove(key)
-                      value
+                      value.toSeq
                   }
                   emitMultiple(out, iterator)
                   complete(out)

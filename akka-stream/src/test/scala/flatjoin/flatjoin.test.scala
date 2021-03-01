@@ -1,7 +1,8 @@
 package flatjoin_akka
 
-import org.scalatest.FunSpec
-import org.scalatest.Matchers
+import org.scalatest.funspec.AnyFunSpec
+import org.scalatest.matchers.should.Matchers
+import scala.language.postfixOps
 import java.nio.ByteBuffer
 import java.io.Closeable
 
@@ -15,7 +16,7 @@ import scala.concurrent.duration._
 import flatjoin._
 import java.io.File
 
-class Flat extends FunSpec with Matchers {
+class Flat extends AnyFunSpec with Matchers {
 
   implicit val skString = new StringKey[String] {
     def key(t: String) = t.toString
@@ -113,13 +114,17 @@ class Flat extends FunSpec with Matchers {
   val a3 = List("e", "f", "g", "h", "h", "i", "j", "k")
 
   val expectedJoin = List(
-    Seq(Vector(Some("a"), None, None, None),
-        Vector(Some("a"), None, None, None)),
+    Seq(
+      Vector(Some("a"), None, None, None),
+      Vector(Some("a"), None, None, None)
+    ),
     Seq(Vector(Some("b"), None, None, None)),
     Seq(Vector(Some("c"), Some("c"), None, None)),
     Seq(Vector(Some("d"), Some("d"), None, None)),
-    Seq(Vector(Some("e"), Some("e"), None, Some("e")),
-        Vector(Some("e"), Some("e"), None, Some("e"))),
+    Seq(
+      Vector(Some("e"), Some("e"), None, Some("e")),
+      Vector(Some("e"), Some("e"), None, Some("e"))
+    ),
     Seq(Vector(None, Some("f"), None, Some("f"))),
     Seq(Vector(None, Some("g"), None, Some("g"))),
     Seq(
@@ -133,8 +138,10 @@ class Flat extends FunSpec with Matchers {
     Seq(Vector(None, None, None, Some("k")))
   )
   val expectedInnerJoin = List(
-    Seq(Vector(Some("e"), Some("e"), None, Some("e")),
-        Vector(Some("e"), Some("e"), None, Some("e"))),
+    Seq(
+      Vector(Some("e"), Some("e"), None, Some("e")),
+      Vector(Some("e"), Some("e"), None, Some("e"))
+    ),
     Seq(
       Vector(Some("h"), Some("h"), None, Some("h")),
       Vector(Some("h"), Some("h"), None, Some("h")),
@@ -179,15 +186,20 @@ class Flat extends FunSpec with Matchers {
 
       val a1 = List("a", "a", "b", "c", "d", "e", "h", "h")
       val f =
-        Await.result(Source(a1).via(adjacentSpan[String]).runWith(Sink.seq),
-                     20 seconds)
+        Await.result(
+          Source(a1).via(adjacentSpan[String]).runWith(Sink.seq),
+          20 seconds
+        )
       f should equal(
-        List(List("a", "a"),
-             List("b"),
-             List("c"),
-             List("d"),
-             List("e"),
-             List("h", "h")))
+        List(
+          List("a", "a"),
+          List("b"),
+          List("c"),
+          List("d"),
+          List("e"),
+          List("h", "h")
+        )
+      )
 
     }
   }
@@ -198,10 +210,12 @@ class Flat extends FunSpec with Matchers {
 
       val f =
         Await
-          .result(concatSources(sources)
-                    .via(Instance().sortAndOuterJoin(4))
-                    .runWith(Sink.seq),
-                  20 seconds)
+          .result(
+            concatSources(sources)
+              .via(Instance().sortAndOuterJoin(4))
+              .runWith(Sink.seq),
+            20 seconds
+          )
           .map(_.toVector)
           .toList
       f should equal(expectedJoin)
@@ -231,10 +245,12 @@ class Flat extends FunSpec with Matchers {
 
       val f =
         Await
-          .result(concatSources(sources)
-                    .via(Instance().outerJoinBySortingShards(4))
-                    .runWith(Sink.seq),
-                  20 seconds)
+          .result(
+            concatSources(sources)
+              .via(Instance().outerJoinBySortingShards(4))
+              .runWith(Sink.seq),
+            20 seconds
+          )
           .map(_.toVector)
           .toList
       f.sortBy(_.hashCode) should equal(expectedJoin.sortBy(_.hashCode))
@@ -264,10 +280,12 @@ class Flat extends FunSpec with Matchers {
 
       val f =
         Await
-          .result(concatSources(sources)
-                    .via(Instance().joinByShards(4))
-                    .runWith(Sink.seq),
-                  10 seconds)
+          .result(
+            concatSources(sources)
+              .via(Instance().joinByShards(4))
+              .runWith(Sink.seq),
+            10 seconds
+          )
           .map(_.toVector)
           .toList
       f.sortBy(_.hashCode) should equal(expectedJoin.sortBy(_.hashCode))
@@ -296,10 +314,12 @@ class Flat extends FunSpec with Matchers {
 
       val f =
         Await
-          .result(concatSources(sources)
-                    .via(Instance().joinByShards(4, List(0, 1, 3)))
-                    .runWith(Sink.seq),
-                  10 seconds)
+          .result(
+            concatSources(sources)
+              .via(Instance().joinByShards(4, List(0, 1, 3)))
+              .runWith(Sink.seq),
+            10 seconds
+          )
           .map(_.toVector)
           .toList
       f.sortBy(_.hashCode) should equal(expectedInnerJoin.sortBy(_.hashCode))
@@ -342,8 +362,10 @@ class Flat extends FunSpec with Matchers {
       val source = Source(List("a", "a", "b", "b", "b", "a"))
 
       Await
-        .result(source.via(Instance().groupBySortingShards).runWith(Sink.seq),
-                atMost = 5 seconds)
+        .result(
+          source.via(Instance().groupBySortingShards).runWith(Sink.seq),
+          atMost = 5 seconds
+        )
         .toSet should equal(Set(List("a", "a", "a"), List("b", "b", "b")))
     }
   }

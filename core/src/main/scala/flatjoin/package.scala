@@ -1,8 +1,10 @@
 import scala.collection.mutable.ArrayBuffer
 
 package object flatjoin {
-  def crossGroup[T](group: Seq[(Int, T)],
-                    columns: Int): Iterator[Seq[Option[T]]] =
+  def crossGroup[T](
+      group: Seq[(Int, T)],
+      columns: Int
+  ): Iterator[Seq[Option[T]]] =
     cross(group.groupBy(_._1).toSeq.map(_._2.toList).toList).iterator.map {
       group =>
         val s = ArrayBuffer.fill[Option[T]](columns)(None)
@@ -10,7 +12,7 @@ package object flatjoin {
           case (i, t) =>
             s(i) = Some(t)
         }
-        s
+        s.toSeq
     }
 
   def cross[T](list: List[List[T]]): List[List[T]] =

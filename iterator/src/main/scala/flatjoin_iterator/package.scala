@@ -4,7 +4,7 @@ import java.nio.channels.FileChannel
 import java.io.{Closeable, File}
 import scala.collection.mutable.ArrayBuffer
 import flatjoin._
-
+import scala.language.postfixOps
 package object flatjoin_iterator {
 
   val EmptyCloseable = new Closeable { def close = () }
@@ -91,13 +91,15 @@ package object flatjoin_iterator {
       }
       fill
       def hasNext = r.isDefined
-      def next = {
+      def next() = {
         val length = r.get
         val position = readBuffer.position
         val limit1 = readBuffer.limit
         readBuffer.limit(position + length)
         val t =
-          try { implicitly[Format[T]].fromBytes(readBuffer) } finally {
+          try {
+            implicitly[Format[T]].fromBytes(readBuffer)
+          } finally {
             readBuffer.position(position + length)
             readBuffer.limit(limit1)
           }
@@ -113,8 +115,13 @@ package object flatjoin_iterator {
     file.deleteOnExit
     val fc = new PimpedFc(
       FileChannel
-        .open(file.toPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE))
-    try { f(fc) } finally { fc.close }
+        .open(file.toPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+    )
+    try {
+      f(fc)
+    } finally {
+      fc.close
+    }
     file
   }
 
@@ -124,8 +131,18 @@ package object flatjoin_iterator {
       var a1: Option[T] = None
       var a2: Option[T] = None
 
-      def fill1 = if (i1.hasNext) { a1 = Some(i1.next) } else { a1 = None }
-      def fill2 = if (i2.hasNext) { a2 = Some(i2.next) } else { a2 = None }
+      def fill1 =
+        if (i1.hasNext) {
+          a1 = Some(i1.next)
+        } else {
+          a1 = None
+        }
+      def fill2 =
+        if (i2.hasNext) {
+          a2 = Some(i2.next)
+        } else {
+          a2 = None
+        }
 
       fill1
       fill2
@@ -133,7 +150,7 @@ package object flatjoin_iterator {
       def hasNext = {
         a1.isDefined || a2.isDefined
       }
-      def next =
+      def next() =
         if (a1.isEmpty) {
           val r = a2.get
           fill2
@@ -190,22 +207,28 @@ package object flatjoin_iterator {
     merge(files.map(_._3)) -> closeable
   }
 
-  def mergeFiles[T: Format: Ordering](l: List[File],
-                                      max: Int): (Iterator[T], Closeable) =
+  def mergeFiles[T: Format: Ordering](
+      l: List[File],
+      max: Int
+  ): (Iterator[T], Closeable) =
     if (l.size < max) doMerge(l)
     else
-      mergeFiles(l.grouped(max)
-                   .map { group =>
-                     val (it, cl) = doMerge(group)
-                     val files = writeTmp(it)
-                     cl.close
-                     files
-                   }
-                   .toList,
-                 max)
+      mergeFiles(
+        l.grouped(max)
+          .map { group =>
+            val (it, cl) = doMerge(group)
+            val files = writeTmp(it)
+            cl.close
+            files
+          }
+          .toList,
+        max
+      )
 
-  def sort[T: Format: Ordering](i: Iterator[T],
-                                max: Int): (Iterator[T], Closeable) = {
+  def sort[T: Format: Ordering](
+      i: Iterator[T],
+      max: Int
+  ): (Iterator[T], Closeable) = {
     val sortedFiles = i
       .grouped(max)
       .map { group =>
@@ -230,9 +253,11 @@ package object flatjoin_iterator {
     val files = 0 until 128 map { i =>
       val file = File.createTempFile("shard_" + i, "shard")
       file.deleteOnExit
-      val fc = FileChannel.open(file.toPath,
-                                StandardOpenOption.CREATE,
-                                StandardOpenOption.WRITE)
+      val fc = FileChannel.open(
+        file.toPath,
+        StandardOpenOption.CREATE,
+        StandardOpenOption.WRITE
+      )
       (i, (file, new PimpedFc(fc)))
     } toMap
 
@@ -259,11 +284,17 @@ package object flatjoin_iterator {
       var r: Option[T] = None
 
       def fill =
-        if (i.hasNext) { r = Some(i.next) } else { r = None }
+        if (i.hasNext) {
+          r = Some(i.next)
+        } else {
+          r = None
+        }
 
       def fillBuffer = {
-        while (r.isDefined && (buffer.isEmpty || ordering.equiv(r.get,
-                                                                buffer.head))) {
+        while (r.isDefined && (buffer.isEmpty || ordering.equiv(
+                 r.get,
+                 buffer.head
+               ))) {
           buffer.append(r.get)
           fill
         }
@@ -274,7 +305,7 @@ package object flatjoin_iterator {
 
       def hasNext = !buffer.isEmpty
 
-      def next = {
+      def next() = {
         val k = buffer.toList
         buffer.clear
         fillBuffer
@@ -285,7 +316,8 @@ package object flatjoin_iterator {
 
   def outerJoinInMemory[T: StringKey](
       it: Iterator[(Int, T)],
-      columns: Int): Iterable[Seq[Option[T]]] = {
+      columns: Int
+  ): Iterable[Seq[Option[T]]] = {
     import scala.collection.mutable.ArrayBuffer
     val mmap =
       scala.collection.mutable.AnyRefMap[String, ArrayBuffer[(Int, T)]]()
@@ -299,18 +331,20 @@ package object flatjoin_iterator {
     }
     mmap.flatMap {
       case (_, group) =>
-        crossGroup(group, columns)
+        crossGroup(group.toSeq, columns)
     }
   }
 
   def outerJoinSorted[T](sorted: Iterator[(Int, T)], columns: Int)(
-      implicit ord: Ordering[(Int, T)]): Iterator[Seq[Option[T]]] =
+      implicit ord: Ordering[(Int, T)]
+  ): Iterator[Seq[Option[T]]] =
     adjacentSpan(sorted).flatMap { group =>
       crossGroup(group, columns)
     }
 
-  def concatWithIndex[T](its: Iterator[(() => (Iterator[T], Closeable), Int)])
-    : Iterator[(Int, T)] =
+  def concatWithIndex[T](
+      its: Iterator[(() => (Iterator[T], Closeable), Int)]
+  ): Iterator[(Int, T)] =
     new Iterator[(Int, T)] {
       def fill =
         if (its.hasNext) {
@@ -332,12 +366,13 @@ package object flatjoin_iterator {
             hasNext
           } else b
         }
-      def next = i._3 -> i._1.next
+      def next() = i._3 -> i._1.next
     }
 
-  def sortAndOuterJoin[T: Ordering](its: List[() => (Iterator[T], Closeable)],
-                                    max: Int)(
-      implicit f: Format[(Int, T)]): (Iterator[Seq[Option[T]]], Closeable) = {
+  def sortAndOuterJoin[T: Ordering](
+      its: List[() => (Iterator[T], Closeable)],
+      max: Int
+  )(implicit f: Format[(Int, T)]): (Iterator[Seq[Option[T]]], Closeable) = {
     val m: Iterator[(Int, T)] = concatWithIndex(its.zipWithIndex.iterator)
 
     implicit val ordering: Ordering[(Int, T)] = Ordering.by(_._2)
@@ -350,7 +385,8 @@ package object flatjoin_iterator {
   }
 
   def sort[T: Ordering](its: List[() => (Iterator[T], Closeable)], max: Int)(
-      implicit f: Format[(Int, T)]): (Iterator[(Int, T)], Closeable) = {
+      implicit f: Format[(Int, T)]
+  ): (Iterator[(Int, T)], Closeable) = {
     val m: Iterator[(Int, T)] = concatWithIndex(its.zipWithIndex.iterator)
 
     implicit val ordering: Ordering[(Int, T)] = Ordering.by(_._2)
@@ -361,7 +397,8 @@ package object flatjoin_iterator {
 
   def outerJoin[T: StringKey](
       its: List[() => (Iterator[T], Closeable)],
-      max: Int)(implicit f: Format[(Int, T)]): Iterator[Seq[Option[T]]] = {
+      max: Int
+  )(implicit f: Format[(Int, T)]): Iterator[Seq[Option[T]]] = {
     val m: Iterator[(Int, T)] = concatWithIndex(its.zipWithIndex.iterator)
     implicit val sk = new StringKey[(Int, T)] {
       def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
@@ -392,8 +429,8 @@ package object flatjoin_iterator {
   }
 
   def outerJoinWithHashMap[T: StringKey](
-      its: List[() => (Iterator[T], Closeable)])(
-      implicit f: Format[(Int, T)]): Iterator[Seq[Option[T]]] = {
+      its: List[() => (Iterator[T], Closeable)]
+  )(implicit f: Format[(Int, T)]): Iterator[Seq[Option[T]]] = {
     val m: Iterator[(Int, T)] = concatWithIndex(its.zipWithIndex.iterator)
     implicit val sk = new StringKey[(Int, T)] {
       def key(t: (Int, T)) = implicitly[StringKey[T]].key(t._2)
@@ -416,7 +453,8 @@ package object flatjoin_iterator {
   }
 
   def outerJoinFullyInMemory[T: StringKey](
-      its: List[() => (Iterator[T], Closeable)]): Iterable[Seq[Option[T]]] =
+      its: List[() => (Iterator[T], Closeable)]
+  ): Iterable[Seq[Option[T]]] =
     outerJoinInMemory(concatWithIndex(its.zipWithIndex.iterator), its.size)
 
 }

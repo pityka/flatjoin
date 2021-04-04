@@ -1,24 +1,24 @@
+
+inThisBuild(
+  List(
+    organization := "io.github.pityka",
+    homepage := Some(url("https://pityka.github.io/flatjoin/")),
+    licenses := List(("MIT", url("https://opensource.org/licenses/MIT"))),
+    developers := List(
+      Developer(
+        "pityka",
+        "Istvan Bartha",
+        "bartha.pityu@gmail.com",
+        url("https://github.com/pityka/flatjoin")
+      )
+    )
+  )
+)
+
 lazy val commonSettings = Seq(
   organization := "io.github.pityka",
   scalaVersion := "2.13.5",
-  version := "0.0.15",
-  licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
-  publishTo := sonatypePublishTo.value,
-  pomExtra in Global := {
-    <url>https://pityka.github.io/flatjoin/</url>
-      <scm>
-        <connection>scm:git:github.com/pityka/flatjoin</connection>
-        <developerConnection>scm:git:git@github.com:pityka/flatjoin</developerConnection>
-        <url>github.com/pityka/flatjoin</url>
-      </scm>
-      <developers>
-        <developer>
-          <id>pityka</id>
-          <name>Istvan Bartha</name>
-          <url>https://pityka.github.io/flatjoin/</url>
-        </developer>
-      </developers>
-  }
+  crossScalaVersions := Seq("2.12.13", "2.13.5")
 )
 
 lazy val root = (project in file("."))

@@ -78,7 +78,7 @@ lazy val upickle = (project in file("upickle"))
     name := "flatjoin-upickle",
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "3.2.5" % "test",
-      "com.lihaoyi" %% "upickle" % "1.2.3"
+      "com.lihaoyi" %% "upickle" % "1.3.11"
     )
   )
   .dependsOn(core, iterator % "test")

@@ -198,10 +198,9 @@ package object flatjoin_iterator {
       (file, channel, iter)
     }
     val closeable = new Closeable {
-      def close = files.foreach {
-        case (f, c, _) =>
-          c.close
-          f.delete
+      def close = files.foreach { case (f, c, _) =>
+        c.close
+        f.delete
       }
     }
     merge(files.map(_._3)) -> closeable
@@ -232,7 +231,10 @@ package object flatjoin_iterator {
     val sortedFiles = i
       .grouped(max)
       .map { group =>
-        val array = new Array[AnyRef](group.size) // Previously used ArraySeq for more compact but slower code
+        val array =
+          new Array[AnyRef](
+            group.size
+          ) // Previously used ArraySeq for more compact but slower code
         var i = 0
         group.foreach { elem =>
           array(i) = elem.asInstanceOf[AnyRef]
@@ -291,10 +293,12 @@ package object flatjoin_iterator {
         }
 
       def fillBuffer = {
-        while (r.isDefined && (buffer.isEmpty || ordering.equiv(
-                 r.get,
-                 buffer.head
-               ))) {
+        while (
+          r.isDefined && (buffer.isEmpty || ordering.equiv(
+            r.get,
+            buffer.head
+          ))
+        ) {
           buffer.append(r.get)
           fill
         }
@@ -321,22 +325,20 @@ package object flatjoin_iterator {
     import scala.collection.mutable.ArrayBuffer
     val mmap =
       scala.collection.mutable.AnyRefMap[String, ArrayBuffer[(Int, T)]]()
-    it.foreach {
-      case pair =>
-        val key = implicitly[StringKey[T]].key(pair._2)
-        mmap.get(key) match {
-          case None         => mmap.update(key, ArrayBuffer(pair))
-          case Some(buffer) => buffer.append(pair)
-        }
+    it.foreach { case pair =>
+      val key = implicitly[StringKey[T]].key(pair._2)
+      mmap.get(key) match {
+        case None         => mmap.update(key, ArrayBuffer(pair))
+        case Some(buffer) => buffer.append(pair)
+      }
     }
-    mmap.flatMap {
-      case (_, group) =>
-        crossGroup(group.toSeq, columns)
+    mmap.flatMap { case (_, group) =>
+      crossGroup(group.toSeq, columns)
     }
   }
 
-  def outerJoinSorted[T](sorted: Iterator[(Int, T)], columns: Int)(
-      implicit ord: Ordering[(Int, T)]
+  def outerJoinSorted[T](sorted: Iterator[(Int, T)], columns: Int)(implicit
+      ord: Ordering[(Int, T)]
   ): Iterator[Seq[Option[T]]] =
     adjacentSpan(sorted).flatMap { group =>
       crossGroup(group, columns)
@@ -417,9 +419,12 @@ package object flatjoin_iterator {
             if (iter.hasNext) sort(iter, max)
             else Iterator.empty -> EmptyCloseable
           val joined = outerJoinSorted(sortedIter, its.size)
-          (joined, new Closeable {
-            def close = { readClose.close; sortClose.close }
-          })
+          (
+            joined,
+            new Closeable {
+              def close = { readClose.close; sortClose.close }
+            }
+          )
 
         }
         (open, 0)

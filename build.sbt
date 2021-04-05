@@ -1,4 +1,3 @@
-
 inThisBuild(
   List(
     organization := "io.github.pityka",

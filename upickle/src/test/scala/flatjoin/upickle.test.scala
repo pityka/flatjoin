@@ -19,12 +19,11 @@ class upickleFlat extends AnyFunSpec with Matchers {
       val a3 = List('e', 'f', 'g', 'h', 'h', 'i', 'j', 'k')
 
       val (i, c) = sortAndOuterJoin(
-        List(a1, a2, Nil, a3).map(
-          x =>
-            () =>
-              x.iterator -> new Closeable {
-                def close = ()
-              }
+        List(a1, a2, Nil, a3).map(x =>
+          () =>
+            x.iterator -> new Closeable {
+              def close = ()
+            }
         ),
         2
       )
@@ -59,20 +58,18 @@ class upickleFlat extends AnyFunSpec with Matchers {
       val it2 = 500 to (N + 500) iterator
 
       val (i, c) = sortAndOuterJoin(
-        List(it1, it2).map(
-          x =>
-            () =>
-              x -> new Closeable {
-                def close = ()
-              }
+        List(it1, it2).map(x =>
+          () =>
+            x -> new Closeable {
+              def close = ()
+            }
         ),
         M
       )
-      i.zipWithIndex.foreach {
-        case (joined, idx) =>
-          if (idx < 500) joined should equal(Vector(Some(idx), None))
-          else if (idx > N) joined should equal(Vector(None, Some(idx)))
-          else joined should equal(Vector(Some(idx), Some(idx)))
+      i.zipWithIndex.foreach { case (joined, idx) =>
+        if (idx < 500) joined should equal(Vector(Some(idx), None))
+        else if (idx > N) joined should equal(Vector(None, Some(idx)))
+        else joined should equal(Vector(Some(idx), Some(idx)))
       }
       c.close
     }

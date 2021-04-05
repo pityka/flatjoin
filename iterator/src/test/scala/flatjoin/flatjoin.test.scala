@@ -71,11 +71,14 @@ class Flat extends FunSpec with Matchers {
       val a2 = List("c", "d", "e", "e", "f", "g", "h")
       val a3 = List("e", "f", "g", "h", "h", "i", "j", "k")
 
-      outerJoinFullyInMemory(List(a1, a2, Nil, a3).map(x =>
-        () =>
-          x.iterator -> new Closeable {
-            def close = ()
-      })).toList.sortBy(_.hashCode) should equal(
+      outerJoinFullyInMemory(
+        List(a1, a2, Nil, a3).map(x =>
+          () =>
+            x.iterator -> new Closeable {
+              def close = ()
+            }
+        )
+      ).toList.sortBy(_.hashCode) should equal(
         List(
           Vector(Some("a"), None, None, None),
           Vector(Some("a"), None, None, None),
@@ -103,16 +106,18 @@ class Flat extends FunSpec with Matchers {
       val it1 = 0 to N iterator
       val it2 = 500 to (N + 500) iterator
 
-      outerJoinFullyInMemory(List(it1, it2).map(x =>
-        () =>
-          x -> new Closeable {
-            def close = ()
-      })).foreach {
-        case (joined) =>
-          val idx = joined.find(_.isDefined).get.get
-          if (idx < 500) joined(1) should equal(None)
-          else if (idx > N) joined(0) should equal(None)
-          else joined(0).get should equal(joined(1).get)
+      outerJoinFullyInMemory(
+        List(it1, it2).map(x =>
+          () =>
+            x -> new Closeable {
+              def close = ()
+            }
+        )
+      ).foreach { case (joined) =>
+        val idx = joined.find(_.isDefined).get.get
+        if (idx < 500) joined(1) should equal(None)
+        else if (idx > N) joined(0) should equal(None)
+        else joined(0).get should equal(joined(1).get)
       }
     }
   }
@@ -123,11 +128,14 @@ class Flat extends FunSpec with Matchers {
       val a2 = List("c", "d", "e", "e", "f", "g", "h")
       val a3 = List("e", "f", "g", "h", "h", "i", "j", "k")
 
-      outerJoinWithHashMap(List(a1, a2, Nil, a3).map(x =>
-        () =>
-          x.iterator -> new Closeable {
-            def close = ()
-      })).toList.sortBy(_.hashCode) should equal(
+      outerJoinWithHashMap(
+        List(a1, a2, Nil, a3).map(x =>
+          () =>
+            x.iterator -> new Closeable {
+              def close = ()
+            }
+        )
+      ).toList.sortBy(_.hashCode) should equal(
         List(
           Vector(Some("a"), None, None, None),
           Vector(Some("a"), None, None, None),
@@ -155,16 +163,18 @@ class Flat extends FunSpec with Matchers {
       val it1 = 0 to N iterator
       val it2 = 500 to (N + 500) iterator
 
-      outerJoinWithHashMap(List(it1, it2).map(x =>
-        () =>
-          x -> new Closeable {
-            def close = ()
-      })).foreach {
-        case (joined) =>
-          val idx = joined.find(_.isDefined).get.get
-          if (idx < 500) joined(1) should equal(None)
-          else if (idx > N) joined(0) should equal(None)
-          else joined(0).get should equal(joined(1).get)
+      outerJoinWithHashMap(
+        List(it1, it2).map(x =>
+          () =>
+            x -> new Closeable {
+              def close = ()
+            }
+        )
+      ).foreach { case (joined) =>
+        val idx = joined.find(_.isDefined).get.get
+        if (idx < 500) joined(1) should equal(None)
+        else if (idx > N) joined(0) should equal(None)
+        else joined(0).get should equal(joined(1).get)
       }
     }
   }
@@ -175,12 +185,15 @@ class Flat extends FunSpec with Matchers {
       val a2 = List('c', 'd', 'e', 'e', 'f', 'g', 'h')
       val a3 = List('e', 'f', 'g', 'h', 'h', 'i', 'j', 'k')
 
-      outerJoin(List(a1, a2, Nil, a3).map(x =>
-                  () =>
-                    x.iterator -> new Closeable {
-                      def close = ()
-                }),
-                2).toList.sortBy(_.hashCode) should equal(
+      outerJoin(
+        List(a1, a2, Nil, a3).map(x =>
+          () =>
+            x.iterator -> new Closeable {
+              def close = ()
+            }
+        ),
+        2
+      ).toList.sortBy(_.hashCode) should equal(
         List(
           Vector(Some('a'), None, None, None),
           Vector(Some('a'), None, None, None),
@@ -208,17 +221,19 @@ class Flat extends FunSpec with Matchers {
       val it1 = 0 to N iterator
       val it2 = 500 to (N + 500) iterator
 
-      outerJoin(List(it1, it2).map(x =>
-                  () =>
-                    x -> new Closeable {
-                      def close = ()
-                }),
-                M).foreach {
-        case (joined) =>
-          val idx = joined.find(_.isDefined).get.get
-          if (idx < 500) joined(1) should equal(None)
-          else if (idx > N) joined(0) should equal(None)
-          else joined(0).get should equal(joined(1).get)
+      outerJoin(
+        List(it1, it2).map(x =>
+          () =>
+            x -> new Closeable {
+              def close = ()
+            }
+        ),
+        M
+      ).foreach { case (joined) =>
+        val idx = joined.find(_.isDefined).get.get
+        if (idx < 500) joined(1) should equal(None)
+        else if (idx > N) joined(0) should equal(None)
+        else joined(0).get should equal(joined(1).get)
       }
     }
   }
@@ -229,12 +244,15 @@ class Flat extends FunSpec with Matchers {
       val a2 = List('c', 'd', 'e', 'e', 'f', 'g', 'h')
       val a3 = List('e', 'f', 'g', 'h', 'h', 'i', 'j', 'k')
 
-      val (i, c) = sortAndOuterJoin(List(a1, a2, Nil, a3).map(x =>
-                                      () =>
-                                        x.iterator -> new Closeable {
-                                          def close = ()
-                                    }),
-                                    2)
+      val (i, c) = sortAndOuterJoin(
+        List(a1, a2, Nil, a3).map(x =>
+          () =>
+            x.iterator -> new Closeable {
+              def close = ()
+            }
+        ),
+        2
+      )
       i.toList should equal(
         List(
           Vector(Some('a'), None, None, None),
@@ -265,17 +283,19 @@ class Flat extends FunSpec with Matchers {
       val it1 = 0 to N iterator
       val it2 = 500 to (N + 500) iterator
 
-      val (i, c) = sortAndOuterJoin(List(it1, it2).map(x =>
-                                      () =>
-                                        x -> new Closeable {
-                                          def close = ()
-                                    }),
-                                    M)
-      i.zipWithIndex.foreach {
-        case (joined, idx) =>
-          if (idx < 500) joined should equal(Vector(Some(idx), None))
-          else if (idx > N) joined should equal(Vector(None, Some(idx)))
-          else joined should equal(Vector(Some(idx), Some(idx)))
+      val (i, c) = sortAndOuterJoin(
+        List(it1, it2).map(x =>
+          () =>
+            x -> new Closeable {
+              def close = ()
+            }
+        ),
+        M
+      )
+      i.zipWithIndex.foreach { case (joined, idx) =>
+        if (idx < 500) joined should equal(Vector(Some(idx), None))
+        else if (idx > N) joined should equal(Vector(None, Some(idx)))
+        else joined should equal(Vector(Some(idx), Some(idx)))
       }
       c.close
     }

@@ -8,9 +8,8 @@ package object flatjoin {
     cross(group.groupBy(_._1).toSeq.map(_._2.toList).toList).iterator.map {
       group =>
         val s = ArrayBuffer.fill[Option[T]](columns)(None)
-        group.foreach {
-          case (i, t) =>
-            s(i) = Some(t)
+        group.foreach { case (i, t) =>
+          s(i) = Some(t)
         }
         s.toSeq
     }

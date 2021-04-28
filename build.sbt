@@ -88,7 +88,7 @@ lazy val jsoniter = (project in file("jsoniter"))
     name := "flatjoin-jsoniter",
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "3.2.5" % "test",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.7.2" % Provided
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.7.3" % Provided
     )
   )
   .dependsOn(core, iterator % "test")

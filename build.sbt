@@ -65,8 +65,8 @@ lazy val circe = (project in file("circe"))
     name := "flatjoin-circe",
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "3.2.9" % "test",
-      "io.circe" %% "circe-core" % "0.13.0",
-      "io.circe" %% "circe-parser" % "0.13.0"
+      "io.circe" %% "circe-core" % "0.14.0",
+      "io.circe" %% "circe-parser" % "0.14.0"
     )
   )
   .dependsOn(core, iterator % "test")

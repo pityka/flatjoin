@@ -33,7 +33,7 @@ lazy val core = (project in file("core"))
   .settings(
     name := "flatjoin-core",
     libraryDependencies ++= Seq(
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.3",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scalatest" %% "scalatest" % "3.2.9" % "test"
     )
   )
